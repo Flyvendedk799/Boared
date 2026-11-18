@@ -32,7 +32,7 @@ import {
   resendInvite,
   setWorkspaceMemberRole,
 } from "@/lib/admin.functions";
-import { workspaceMembersQuery, type WorkspaceMemberRow } from "@/data/projects";
+import { projectListQuery, workspaceMembersQuery, type WorkspaceMemberRow } from "@/data/projects";
 import { qk } from "@/data/keys";
 import { ROLE_LABEL, type AppRole } from "@/data/enums";
 import { formatRelative } from "@/lib/utils-format";
@@ -232,6 +232,8 @@ function InviteTeammateButton() {
   const { workspaceId } = useAuth();
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<AppRole>("admin");
+  const projects = useQuery(projectListQuery(workspaceId));
+  const [projectId, setProjectId] = useState("");
   const invite = useServerAction(useServerFn(inviteClient), {
     label: "team.invite",
     success: "Invite sent",
@@ -262,6 +264,7 @@ function InviteTeammateButton() {
               email: String(form.get("email")),
               fullName: String(form.get("name") || "") || undefined,
               role,
+              projectId: role === "admin" ? undefined : projectId || undefined,
             });
           }}
         >
@@ -300,6 +303,31 @@ function InviteTeammateButton() {
               Admins see every project. Clients only see projects you add them to.
             </p>
           </div>
+          {role !== "admin" && (
+            <label className="block space-y-1">
+              Project access
+              <select
+                className="block h-11 w-full rounded border bg-background px-3"
+                required
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+              >
+                <option value="">Choose a project</option>
+                {projects.data?.map((p) => (
+                  <option value={p.id} key={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <p className="text-sm">
+            This invite grants access to{" "}
+            {role === "admin"
+              ? "every project in this workspace"
+              : (projects.data?.find((p) => p.id === projectId)?.title ?? "the project you select")}
+            .
+          </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel

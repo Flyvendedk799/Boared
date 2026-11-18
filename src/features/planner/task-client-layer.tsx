@@ -9,7 +9,7 @@ import { CommentThread } from "./client-plan-screen";
 import type { PlanActions } from "./use-plan-actions";
 
 /**
- * The client's version of a task: a short plain-Danish name, one sentence, and a
+ * The client's version of a task: a short plain-language name, one sentence, and a
  * plain wording for each step. The agency's own title, brief and steps stay as
  * they are; a client sees a task only once it has a title here, and a step only
  * once it has a wording.
@@ -54,7 +54,7 @@ export function TaskClientLayer({ task, actions }: { task: TaskWithAgent; action
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Plain Danish, no jargon: say what it is for them, not how it is built. Clients see a task
+        Use the client’s language: say what it is for them, not how it is built. Clients see a task
         only once it has a title here, and a step only once it has a wording.
       </p>
 

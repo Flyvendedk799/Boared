@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -25,6 +26,7 @@ const INBOX_BUTTON =
   "h-7 px-2.5 text-[13px] max-md:h-11 max-md:flex-1 max-md:border max-md:border-input max-md:text-sm";
 
 function InboxOpenLink({ link, onOpen }: { link: string; onOpen: () => void }) {
+  const t = usePortalText();
   const target = notificationLinkTarget(link);
   if (!target) return null;
   const open = (() => {
@@ -32,7 +34,7 @@ function InboxOpenLink({ link, onOpen }: { link: string; onOpen: () => void }) {
       case "ticket":
         return (
           <Link to="/app/tickets/$ticketId" params={{ ticketId: target.ticketId }} onClick={onOpen}>
-            Open
+            {t("Open", "Åbn")}
           </Link>
         );
       case "project":
@@ -43,7 +45,7 @@ function InboxOpenLink({ link, onOpen }: { link: string; onOpen: () => void }) {
             search={{ tab: target.tab }}
             onClick={onOpen}
           >
-            Open
+            {t("Open", "Åbn")}
           </Link>
         );
       case "plan":
@@ -54,13 +56,13 @@ function InboxOpenLink({ link, onOpen }: { link: string; onOpen: () => void }) {
             search={{ task: target.task }}
             onClick={onOpen}
           >
-            Open
+            {t("Open", "Åbn")}
           </Link>
         );
       case "app":
         return (
           <Link to={target.path as "/app"} onClick={onOpen}>
-            Open
+            {t("Open", "Åbn")}
           </Link>
         );
     }
@@ -85,6 +87,7 @@ function InboxActor({ person }: { person: AvatarPerson | undefined }) {
 }
 
 function InboxPage() {
+  const t = usePortalText();
   const { user, workspaceId } = useAuth();
   const notifications = useQuery({ ...notificationListQuery(), enabled: Boolean(user) });
   const people = useQuery(workspacePeopleQuery(workspaceId));
@@ -103,8 +106,11 @@ function InboxPage() {
   return (
     <>
       <PageHeader
-        title="Inbox"
-        description="Replies, mentions and progress across your projects."
+        title={portalLabel(t, "Inbox")}
+        description={t(
+          "Replies, mentions and progress across your projects.",
+          "Svar, omtaler og fremskridt i dine projekter.",
+        )}
         maxWidth="max-w-[760px]"
         action={
           unread.length > 0 && (
@@ -114,7 +120,7 @@ function InboxPage() {
               disabled={markRead.busy}
               onClick={() => markRead.fire({})}
             >
-              Mark all read
+              {t("Mark all read", "Markér alle som læst")}
             </Button>
           )
         }
@@ -127,8 +133,11 @@ function InboxPage() {
           empty={
             <div className="rounded-[14px] border bg-card">
               <EmptyState
-                title="All clear"
-                description="Ticket activity, replies and milestones land here."
+                title={t("All clear", "Ingen beskeder")}
+                description={t(
+                  "Ticket activity, replies and milestones land here.",
+                  "Her vises sager, svar og milepæle.",
+                )}
               />
             </div>
           }
@@ -164,7 +173,9 @@ function InboxPage() {
                         <span className="break-words text-sm font-medium leading-snug">
                           {notification.title}
                         </span>
-                        <StatusPill>{NOTIFICATION_KIND_LABEL[notification.kind]}</StatusPill>
+                        <StatusPill>
+                          {portalLabel(t, NOTIFICATION_KIND_LABEL[notification.kind])}
+                        </StatusPill>
                       </div>
                       {notification.body && (
                         <p className="mt-0.5 break-words text-[13px] leading-snug text-muted-foreground max-md:line-clamp-3">

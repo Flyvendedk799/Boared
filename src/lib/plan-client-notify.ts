@@ -68,6 +68,16 @@ export async function notifyClientQuestion(input: {
       link: clientTaskLink(input.planId, input.taskId),
       emailSubject: `Spørgsmål til dig i ${ctx.plan.title}`,
       emailBody: excerpt || undefined,
+      localized: {
+        en: {
+          title: `You have a question on ${ctx.plan.title}`,
+          emailSubject: `Question for you on ${ctx.plan.title}`,
+        },
+        da: {
+          title: `Du har et spørgsmål i planen ${ctx.plan.title}`,
+          emailSubject: `Spørgsmål til dig i ${ctx.plan.title}`,
+        },
+      },
       template: "plan_client_question",
       relatedType: "plan",
       relatedId: input.planId,

@@ -1006,6 +1006,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          portal_language: string
           avatar_url: string | null
           company: string | null
           created_at: string
@@ -1015,6 +1016,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          portal_language?: string
           avatar_url?: string | null
           company?: string | null
           created_at?: string
@@ -1024,6 +1026,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          portal_language?: string
           avatar_url?: string | null
           company?: string | null
           created_at?: string
@@ -3103,7 +3106,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-
+      project_change_period: {
+        Args: { _project: string; _from: string; _to: string; _completed: boolean }
+        Returns: Json
+      }
+      planner_lookup: {
+        Args: { _workspace: string; _term: string; _waiting?: boolean }
+        Returns: {
+          kind: string
+          item_id: string
+          plan_id: string
+          task_id: string | null
+          project: string | null
+          title: string
+        }[]
+      }
+      issue_invoice: {
+        Args: { _input: Json }
+        Returns: { id: string; number: string }[]
+      }
       mcp_oauth_user_is_live_admin: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean

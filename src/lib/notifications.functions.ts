@@ -111,13 +111,17 @@ export async function deliver(targets: NotifyTarget[]): Promise<{ inApp: number;
 
   const [{ data: prefs }, { data: profiles }] = await Promise.all([
     db.from("notification_preferences").select("*").in("user_id", userIds),
-    db.from("profiles").select("id, email, full_name").in("id", userIds),
+    db.from("profiles").select("id, email, full_name, portal_language").in("id", userIds),
   ]);
 
   const prefsById = new Map((prefs ?? []).map((p) => [p.user_id, p]));
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-  const inAppRows = targets
+  const localized = targets.map((target) => ({
+    ...target,
+    ...target.localized?.[profileById.get(target.userId)?.portal_language === "da" ? "da" : "en"],
+  }));
+  const inAppRows = localized
     .filter((t) => channelEnabled(prefsById.get(t.userId) ?? null, t.kind, "in_app"))
     .map(inAppRow);
 
@@ -129,7 +133,7 @@ export async function deliver(targets: NotifyTarget[]): Promise<{ inApp: number;
   const email = await getEmailProvider();
   let emails = 0;
 
-  for (const target of targets) {
+  for (const target of localized) {
     if (!target.emailSubject) continue;
 
     const pref = prefsById.get(target.userId) ?? null;

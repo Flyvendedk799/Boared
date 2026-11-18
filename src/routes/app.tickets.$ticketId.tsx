@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
@@ -131,6 +132,7 @@ function TicketBackButton({ isAdmin, projectId }: { isAdmin: boolean; projectId?
 }
 
 function TicketPage() {
+  const tr = usePortalText();
   const { ticketId } = Route.useParams();
   const { user, isAdmin, workspaceId } = useAuth();
   const workspacePeople = useQuery(workspacePeopleQuery(workspaceId));
@@ -194,17 +196,17 @@ function TicketPage() {
           <div className="mt-2.5 flex flex-wrap items-center gap-2.5 max-md:mt-1 max-md:gap-2">
             <span className="font-mono text-muted-foreground">#{t.ticket_number}</span>
             <StatusPill tone={TICKET_STATUS_TONE[t.status]}>
-              {TICKET_STATUS_LABEL[t.status]}
+              {portalLabel(tr, TICKET_STATUS_LABEL[t.status])}
             </StatusPill>
             {t.status === "open" && t.follow_up_kind && (
               <StatusPill tone="warning">Follow-up: {t.follow_up_kind}</StatusPill>
             )}
             <StatusPill tone={TICKET_PRIORITY_TONE[t.priority]}>
-              {TICKET_PRIORITY_LABEL[t.priority]}
+              {portalLabel(tr, TICKET_PRIORITY_LABEL[t.priority])}
             </StatusPill>
             <SlaBadge dueAt={t.sla_due_at} status={t.status} showOk />
             <span className="text-xs text-muted-foreground">
-              {TICKET_TYPE_LABEL[t.type]}
+              {portalLabel(tr, TICKET_TYPE_LABEL[t.type])}
               {t.project ? (
                 <>
                   {" · "}
@@ -261,7 +263,7 @@ function TicketPage() {
                   className="h-4 w-4 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
-                <span className="font-medium">Details</span>
+                <span className="font-medium">{tr("Details", "Detaljer")}</span>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {isAdmin
                     ? "Assignee, dates, labels, time"
@@ -281,7 +283,7 @@ function TicketPage() {
             <div className="min-w-0 space-y-8 max-md:space-y-6">
               <section aria-labelledby="sent">
                 <h2 id="sent" className="mb-2.5 font-display text-2xl font-normal max-md:text-xl">
-                  What they sent
+                  {tr("What they sent", "Indberetning")}
                 </h2>
                 <div className="rounded-xl border bg-card px-5 py-[18px] leading-relaxed max-md:px-4 max-md:py-4">
                   <div className="mb-2 text-[13px] text-muted-foreground">
@@ -290,7 +292,9 @@ function TicketPage() {
                   {t.description ? (
                     <RichTextView html={t.description} />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No description.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {tr("No description.", "Ingen beskrivelse.")}
+                    </p>
                   )}
 
                   {t.eta_date && (
@@ -360,7 +364,9 @@ function TicketPage() {
                   side="bottom"
                   className="gap-0 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-11"
                 >
-                  <SheetTitle className="mb-3 font-display text-xl font-normal">Details</SheetTitle>
+                  <SheetTitle className="mb-3 font-display text-xl font-normal">
+                    {tr("Details", "Detaljer")}
+                  </SheetTitle>
                   <SheetDescription className="sr-only">
                     Properties, dates, labels and links for this ticket.
                   </SheetDescription>
@@ -400,6 +406,7 @@ function TicketEditButton({
   title: string;
   description: string | null;
 }) {
+  const tr = usePortalText();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(originalTitle);
   const [description, setDescription] = useState(originalDescription ?? "");
@@ -434,7 +441,7 @@ function TicketEditButton({
             }}
           >
             <div className="space-y-1">
-              <Label htmlFor="ticket-edit-title">Title</Label>
+              <Label htmlFor="ticket-edit-title">{tr("Title", "Titel")}</Label>
               <Input
                 id="ticket-edit-title"
                 value={title}
@@ -453,7 +460,7 @@ function TicketEditButton({
             </div>
             <div className="flex justify-end gap-2 max-md:flex-col-reverse max-md:[&>button]:w-full">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
+                {tr("Cancel", "Annuller")}
               </Button>
               <Button type="submit" disabled={save.busy || !title.trim()}>
                 {save.busy ? "Saving…" : "Save changes"}
@@ -468,20 +475,21 @@ function TicketEditButton({
 
 /** What a client can see about their ticket. Read-only: only the agency changes these. */
 function ClientProperties({ ticket: t }: { ticket: TicketDetail }) {
+  const tr = usePortalText();
   const rows: Array<[string, React.ReactNode]> = [
     [
       "Status",
       <StatusPill key="s" tone={TICKET_STATUS_TONE[t.status]}>
-        {TICKET_STATUS_LABEL[t.status]}
+        {portalLabel(tr, TICKET_STATUS_LABEL[t.status])}
       </StatusPill>,
     ],
     [
       "Priority",
       <StatusPill key="p" tone={TICKET_PRIORITY_TONE[t.priority]}>
-        {TICKET_PRIORITY_LABEL[t.priority]}
+        {portalLabel(tr, TICKET_PRIORITY_LABEL[t.priority])}
       </StatusPill>,
     ],
-    ["Project", t.project?.title ?? "—"],
+    [tr("Project", "Projekt"), t.project?.title ?? "—"],
     ["Reporter", t.reporter?.full_name ?? t.reporter?.email ?? "—"],
     ["ETA", t.eta_date ? formatDate(t.eta_date) : "Not set yet"],
   ];
@@ -517,6 +525,7 @@ function CommentBox({
   userId: string;
   isAdmin: boolean;
 }) {
+  const tr = usePortalText();
   const { workspaceId } = useAuth();
   const aiEnabled = useAiEnabled();
   const [body, setBody] = useState(() => {
@@ -660,7 +669,7 @@ function CommentBox({
           {isMobile && (
             <div className="-mt-1 flex items-center justify-between">
               <span className="text-sm font-medium">
-                {internal ? "Internal note" : isAdmin ? "Reply to the client" : "Reply"}
+                {internal ? "Internal note" : isAdmin ? "Reply to the client" : tr("Reply", "Svar")}
               </span>
               <Button
                 type="button"
@@ -676,7 +685,7 @@ function CommentBox({
           )}
           <div className="space-y-1.5">
             <Label htmlFor="reply" className="sr-only">
-              Your reply
+              {tr("Your reply", "Dit svar")}
             </Label>
             <RichTextEditor
               id="reply"
@@ -736,15 +745,17 @@ function CommentBox({
             )}
             {!internal && (
               <label className="flex items-center gap-2 text-xs text-muted-foreground max-md:w-full max-md:text-sm">
-                <span>Follow-up</span>
+                <span>{tr("Follow-up", "Opfølgning")}</span>
                 <select
                   className="rounded-md border bg-background px-2 py-1.5 max-md:h-11 max-md:flex-1"
                   value={followUpKind}
                   onChange={(event) => setFollowUpKind(event.target.value as typeof followUpKind)}
                 >
-                  <option value="">None</option>
-                  <option value="improvement">Open for improvement</option>
-                  <option value="fix">Open for fix</option>
+                  <option value="">{tr("None", "Ingen")}</option>
+                  <option value="improvement">
+                    {tr("Open for improvement", "Opret forbedring")}
+                  </option>
+                  <option value="fix">{tr("Open for fix", "Opret rettelse")}</option>
                 </select>
               </label>
             )}
@@ -756,7 +767,7 @@ function CommentBox({
                 busy || (followUpKind ? !plainText(body) : !plainText(body) && drafts.length === 0)
               }
             >
-              {busy ? "Sending…" : internal ? "Add note" : "Send reply"}
+              {busy ? "Sending…" : internal ? "Add note" : tr("Send reply", "Send svar")}
             </Button>
           </div>
         </>

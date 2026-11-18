@@ -1,0 +1,38 @@
+name: Mobile workflows
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: mobile-workflows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start -x studio,edge-runtime,logflare,vector,supavisor,imgproxy
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Test client and admin journeys in mobile Safari and Chrome
+        shell: bash
+        run: |
+          eval "$(supabase status -o env)"
+          export VITE_SUPABASE_URL="$API_URL" SUPABASE_URL="$API_URL"
+          export VITE_SUPABASE_PUBLISHABLE_KEY="$ANON_KEY" SUPABASE_PUBLISHABLE_KEY="$ANON_KEY"
+          export SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" BOARED_LOCAL_MOBILE=1
+          npm run e2e -- --project=iphone --project=android --workers=1
+      - name: Check billing and client visibility
+        run: |
+          eval "$(supabase status -o env)"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/portal_workflows.sql

@@ -23,6 +23,7 @@ async function notifyProjectMembers(opts: {
   title: string;
   body?: string;
   link: string;
+  localized?: NotifyTarget["localized"];
   relatedType?: string;
   relatedId?: string;
 }) {
@@ -49,7 +50,8 @@ async function notifyProjectMembers(opts: {
       body: opts.body,
       link: opts.link,
       emailSubject: opts.title,
-      emailBody: opts.body,
+      localized: opts.localized,
+      emailBody: undefined,
       relatedType: opts.relatedType,
       relatedId: opts.relatedId,
     })),
@@ -148,6 +150,13 @@ export const sendQuote = createServerFn({ method: "POST" })
         actorId: context.userId,
         kind: "invoice",
         title: `Quote ready: ${quote.title}`,
+        localized: {
+          da: {
+            title: `Tilbud klar: ${quote.title}`,
+            emailSubject: `Tilbud klar: ${quote.title}`,
+            body: "Gennemgå tilbuddet under fakturering.",
+          },
+        },
         body: "Review and accept it in Billing.",
         link: `/app/projects/${quote.project_id}?tab=billing`,
         relatedType: "quote",
@@ -261,8 +270,10 @@ export const createInvoice = createServerFn({ method: "POST" })
         notes: z.string().max(5000).optional(),
         /** Omit `number` to let the workspace counter assign the next one. */
         number: z.string().max(50).optional(),
-        lines: z.array(lineSchema).min(1).max(100),
+        lines: z.array(lineSchema).max(100),
         /** Time entries to mark as billed on this invoice. */
+        timeChargeCents: z.number().int().nonnegative().optional(),
+        timeMinutes: z.number().int().nonnegative().optional(),
         timeEntryIds: z.array(z.string().uuid()).max(500).default([]),
         send: z.boolean().default(true),
       })
@@ -271,48 +282,10 @@ export const createInvoice = createServerFn({ method: "POST" })
   .handler(({ data, context }) =>
     guard("billing.createInvoice", async () => {
       const { supabase } = context;
-      const subtotal = sumLines(data.lines);
-      const total = subtotal + Math.round((subtotal * data.taxBps) / 10_000);
-
       const { data: invoice, error } = await supabase
-        .from("invoices")
-        .insert({
-          project_id: data.projectId,
-          milestone_id: data.milestoneId ?? null,
-          quote_id: data.quoteId ?? null,
-          amount_cents: total,
-          subtotal_cents: subtotal,
-          tax_bps: data.taxBps,
-          currency: data.currency,
-          due_date: data.dueDate ?? null,
-          notes: data.notes ?? null,
-          number: data.number ?? null,
-          status: data.send ? "sent" : "draft",
-          issued_at: data.send ? new Date().toISOString() : null,
-        })
-        .select("id, number")
+        .rpc("issue_invoice", { _input: data })
         .single();
       if (error) throw error;
-
-      const { error: lineError } = await supabase.from("invoice_line_items").insert(
-        data.lines.map((line, position) => ({
-          invoice_id: invoice.id,
-          description: line.description,
-          unit_price_cents: line.unit_price_cents,
-          quantity: line.quantity,
-          position,
-        })),
-      );
-      if (lineError) throw lineError;
-
-      if (data.timeEntryIds.length > 0) {
-        const { error: timeError } = await supabase
-          .from("time_entries")
-          .update({ invoice_id: invoice.id })
-          .in("id", data.timeEntryIds);
-        if (timeError) throw timeError;
-      }
-
       return { id: invoice.id, number: invoice.number };
     }),
   );

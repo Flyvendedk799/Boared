@@ -174,6 +174,16 @@ async function notifyComment(input: {
         ? `Nyt svar på planen ${input.planTitle}`
         : `${who} kommenterede planen ${input.planTitle}`,
       emailBody: excerpt || undefined,
+      localized: {
+        en: {
+          title: `${who} replied on ${where}`,
+          emailSubject: `New comment on ${input.planTitle}`,
+        },
+        da: {
+          title: `${who} kommenterede ${where}`,
+          emailSubject: `Ny kommentar på ${input.planTitle}`,
+        },
+      },
       template: "plan_client_comment",
       relatedType: "plan",
       relatedId: input.planId,

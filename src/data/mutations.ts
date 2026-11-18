@@ -154,3 +154,11 @@ export const uploadToStorage = (bucket: string, path: string, file: File) =>
   supabase.storage.from(bucket).upload(path, file, {
     contentType: file.type || "application/octet-stream",
   });
+
+export const updatePortalLanguage = (id: string, language: string) =>
+  supabase
+    .from("profiles")
+    .update({ portal_language: language })
+    .eq("id", id)
+    .select("id")
+    .single();

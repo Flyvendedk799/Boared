@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -93,6 +94,7 @@ export const Route = createFileRoute("/app/projects/$projectId")({
 });
 
 function ProjectPage() {
+  const tr = usePortalText();
   const { projectId } = Route.useParams();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
@@ -157,7 +159,7 @@ function ProjectPage() {
                 to="/app/projects"
                 className="hover:text-foreground max-md:inline-flex max-md:min-h-11 max-md:items-center"
               >
-                ← Projects
+                {tr("← Projects", "← Projekter")}
               </Link>
             }
             title={p.title}
@@ -168,7 +170,7 @@ function ProjectPage() {
                   <ProjectStatusSelect projectId={projectId} status={p.status} />
                 ) : (
                   <StatusPill tone={PROJECT_STATUS_TONE[p.status]}>
-                    {PROJECT_STATUS_LABEL[p.status]}
+                    {portalLabel(tr, PROJECT_STATUS_LABEL[p.status])}
                   </StatusPill>
                 )}
                 <span className="min-w-0 truncate">{p.organization?.name ?? "Internal"}</span>
@@ -221,14 +223,14 @@ function ProjectPage() {
                 <Button asChild className="max-md:order-first max-md:w-full">
                   <Link to="/app/report" search={{ project: projectId, url: undefined }}>
                     <Bug className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    Report something
+                    {tr("Report something", "Indberet en sag")}
                   </Link>
                 </Button>
               </>
             }
             tabs={tabDefs.map((t) => ({
               id: t.id,
-              label: t.label,
+              label: portalLabel(tr, t.label),
               active: tab === t.id,
               onSelect: () => setTab(t.id),
             }))}
@@ -240,7 +242,7 @@ function ProjectPage() {
               (p.status === "discovery" || p.status === "proposal") && (
                 <p className="mb-4 text-xs text-muted-foreground">
                   Plan work is finished — update the stage when the engagement moves past{" "}
-                  {PROJECT_STATUS_LABEL[p.status].toLowerCase()}.
+                  {portalLabel(tr, PROJECT_STATUS_LABEL[p.status]).toLowerCase()}.
                   {!p.github_repo ? " Repository is optional and separate." : ""}
                 </p>
               )}
@@ -288,7 +290,11 @@ function ProjectPage() {
 
             {tab === "billing" && (
               <SectionBoundary label="project-billing">
-                <BillingTab projectId={projectId} currency={p.currency} />
+                <BillingTab
+                  hourlyRate={p.hourly_rate_cents}
+                  projectId={projectId}
+                  currency={p.currency}
+                />
               </SectionBoundary>
             )}
 
@@ -349,6 +355,7 @@ function TicketsPanel({
   viewerId: string;
   workspaceId: string | null;
 }) {
+  const tr = usePortalText();
   const tickets = useInfiniteQuery({
     ...ticketListQuery({ projectId, sort: "updated" }, viewerId, workspaceId),
     enabled: Boolean(viewerId && workspaceId),
@@ -363,13 +370,16 @@ function TicketsPanel({
         <Card>
           <EmptyState
             icon={Ticket}
-            title="No tickets yet"
-            description="Anything you report against this project shows up here."
+            title={tr("No tickets yet", "Ingen sager endnu")}
+            description={tr(
+              "Anything you report against this project shows up here.",
+              "Her vises alle indberetninger om projektet.",
+            )}
             action={
               <Button asChild>
                 <Link to="/app/report" search={{ project: projectId, url: undefined }}>
                   <Bug className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                  Report something
+                  {tr("Report something", "Indberet en sag")}
                 </Link>
               </Button>
             }
@@ -409,6 +419,7 @@ function PeoplePanel({
   pendingInvite: string | null;
   onPendingInviteChange: (email: string | null) => void;
 }) {
+  const tr = usePortalText();
   const { user, workspaceId } = useAuth();
   const members = useQuery(projectMembersQuery(projectId));
   const workspaceMembers = useQuery(workspaceMembersQuery(workspaceId));
@@ -484,9 +495,9 @@ function PeoplePanel({
                     {member.profile?.full_name || member.profile?.email || "Client"}
                   </span>
                   {member.pending ? (
-                    <StatusPill tone="warning">Pending</StatusPill>
+                    <StatusPill tone="warning">{tr("Pending", "Afventer")}</StatusPill>
                   ) : (
-                    <StatusPill tone="success">Accepted</StatusPill>
+                    <StatusPill tone="success">{tr("Accepted", "Accepteret")}</StatusPill>
                   )}
                 </span>
                 <Button
@@ -609,9 +620,9 @@ function PeoplePanel({
                             {member.profile?.full_name ?? member.profile?.email}
                           </span>
                           {pending ? (
-                            <StatusPill tone="warning">Pending</StatusPill>
+                            <StatusPill tone="warning">{tr("Pending", "Afventer")}</StatusPill>
                           ) : (
-                            <StatusPill tone="success">Accepted</StatusPill>
+                            <StatusPill tone="success">{tr("Accepted", "Accepteret")}</StatusPill>
                           )}
                         </div>
                         <div className="truncate text-xs text-muted-foreground">
@@ -769,6 +780,7 @@ function RemoveMemberButton({
 }
 
 function ProjectStatusSelect({ projectId, status }: { projectId: string; status: ProjectStatus }) {
+  const tr = usePortalText();
   const { workspaceId } = useAuth();
   const [confirmArchive, setConfirmArchive] = useState(false);
   const update = useServerAction(useServerFn(setProjectStatus), {
@@ -793,7 +805,7 @@ function ProjectStatusSelect({ projectId, status }: { projectId: string; status:
         <SelectContent>
           {PROJECT_STATUSES.map((value) => (
             <SelectItem key={value} value={value}>
-              {PROJECT_STATUS_LABEL[value]}
+              {portalLabel(tr, PROJECT_STATUS_LABEL[value])}
             </SelectItem>
           ))}
         </SelectContent>
@@ -830,6 +842,7 @@ function InviteClientButton({
   className?: string;
   onInvited?: (email: string) => void;
 }) {
+  const tr = usePortalText();
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<"client" | "client_admin">("client");
   const { workspaceId } = useAuth();
@@ -853,12 +866,12 @@ function InviteClientButton({
       <DialogTrigger asChild>
         <Button variant="outline" className={className}>
           <UserPlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Invite client
+          {tr("Invite client", "Inviter kunde")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Invite to this project</DialogTitle>
+          <DialogTitle>{tr("Invite to this project", "Inviter til projektet")}</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={(event) => {
@@ -890,12 +903,12 @@ function InviteClientButton({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="invite-name">Name (optional)</Label>
+            <Label htmlFor="invite-name">{tr("Name (optional)", "Navn (valgfrit)")}</Label>
             <Input id="invite-name" name="name" autoComplete="name" enterKeyHint="done" />
           </div>
           {canChooseRole && (
             <div className="space-y-1.5">
-              <Label htmlFor="invite-role">Role</Label>
+              <Label htmlFor="invite-role">{tr("Role", "Rolle")}</Label>
               <Select
                 value={role}
                 onValueChange={(value) => setRole(value as "client" | "client_admin")}
@@ -904,8 +917,10 @@ function InviteClientButton({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="client">Client</SelectItem>
-                  <SelectItem value="client_admin">Client lead</SelectItem>
+                  <SelectItem value="client">{tr("Client", "Kunde")}</SelectItem>
+                  <SelectItem value="client_admin">
+                    {tr("Client lead", "Kundeansvarlig")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -915,7 +930,7 @@ function InviteClientButton({
           </p>
           <DialogFooter>
             <Button type="submit" disabled={invite.busy || !workspaceId}>
-              {invite.busy ? "Inviting…" : "Send invite"}
+              {invite.busy ? "Inviting…" : tr("Send invite", "Send invitation")}
             </Button>
           </DialogFooter>
         </form>

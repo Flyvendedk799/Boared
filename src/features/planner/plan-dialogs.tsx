@@ -125,7 +125,7 @@ export type SectionValues = {
   description: string;
   goals: string;
   intentions: string;
-  /** The client layer: a short plain-language summary, in Danish. */
+  /** The client layer: a short plain-language summary. */
   clientSummary: string;
   color: string | null;
   tags: string[];
@@ -251,7 +251,7 @@ export function SectionDialog({
           </div>
           <div className="flex flex-col gap-1.5 rounded-xl border border-dashed p-3">
             <Label htmlFor="section-client-summary" className="text-xs text-muted-foreground">
-              Client summary (Danish)
+              Client summary
             </Label>
             <Textarea
               id="section-client-summary"

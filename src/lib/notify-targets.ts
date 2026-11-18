@@ -27,6 +27,10 @@ export interface NotifyTarget {
   /** Subject line. Omit to skip email for this notification entirely. */
   emailSubject?: string;
   emailBody?: string;
+  localized?: {
+    en?: { title: string; emailSubject: string };
+    da: { title: string; emailSubject: string; body?: string };
+  };
   template?: string;
   relatedType?: string;
   relatedId?: string;
@@ -123,6 +127,13 @@ export function ticketCommentTargets(input: {
     kind: "mention",
     title: `${who} mentioned you${input.internal ? " in an internal note" : ""}`,
     body: input.excerpt || `On ${label}`,
+    localized: {
+      da: {
+        title: `${who} nævnte dig${input.internal ? " i en intern note" : ""}`,
+        emailSubject: `${who} nævnte dig i ${label}`,
+        body: input.excerpt || "I " + label,
+      },
+    },
     emailSubject: `${who} mentioned you on ${label}`,
     emailBody: input.excerpt || undefined,
   });
@@ -144,6 +155,13 @@ export function ticketCommentTargets(input: {
             userId,
             kind: "comment",
             title: `${who} replied`,
+            localized: {
+              da: {
+                title: `${who} svarede`,
+                emailSubject: `${who} svarede på ${label}`,
+                body: input.excerpt || "I " + label,
+              },
+            },
             body: input.excerpt || `On ${label}`,
             emailSubject: `${who} replied on ${label}`,
             emailBody: input.excerpt || undefined,
@@ -179,6 +197,12 @@ export function assignmentTarget(input: {
     actorId: input.actorId,
     kind: "assigned",
     title: `${input.actorName} assigned you ${input.what}`,
+    localized: {
+      da: {
+        title: `${input.actorName} tildelte dig ${input.what}`,
+        emailSubject: `${input.actorName} tildelte dig ${input.what}`,
+      },
+    },
     body: input.what,
     link: input.link,
     emailSubject: `${input.actorName} assigned you ${input.what}`,
@@ -207,6 +231,12 @@ export function mentionTargets(input: {
       actorId: input.actorId,
       kind: "mention" as const,
       title: `${input.actorName} mentioned you`,
+      localized: {
+        da: {
+          title: `${input.actorName} nævnte dig`,
+          emailSubject: `${input.actorName} nævnte dig i ${input.where}`,
+        },
+      },
       body: input.excerpt || `On ${input.where}`,
       link: input.link,
       emailSubject: `${input.actorName} mentioned you on ${input.where}`,

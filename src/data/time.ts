@@ -76,18 +76,24 @@ export function unbilledTimeQuery(projectId: string) {
   return queryOptions({
     queryKey: [...qk.projectTime(projectId), "unbilled"] as const,
     queryFn: async (): Promise<TimeEntryWithRefs[]> => {
-      const { data, error } = await supabase
-        .from("time_entries")
-        .select(WITH_REFS)
-        .eq("project_id", projectId)
-        .eq("billable", true)
-        .is("invoice_id", null)
-        .not("ended_at", "is", null)
-        .order("started_at")
-        .returns<TimeEntryWithRefs[]>();
-
-      if (error) throw new DataError("time_entries.unbilled", error);
-      return data ?? [];
+      const rows: TimeEntryWithRefs[] = [];
+      const pageSize = 500;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("time_entries")
+          .select(WITH_REFS)
+          .eq("project_id", projectId)
+          .eq("billable", true)
+          .is("invoice_id", null)
+          .not("ended_at", "is", null)
+          .order("started_at")
+          .order("id")
+          .range(from, from + pageSize - 1)
+          .returns<TimeEntryWithRefs[]>();
+        if (error) throw new DataError("time_entries.unbilled", error);
+        rows.push(...data);
+        if (data.length < pageSize) return rows;
+      }
     },
   });
 }

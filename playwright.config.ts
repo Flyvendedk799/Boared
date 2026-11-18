@@ -19,6 +19,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: "**/mobile-workflows.spec.ts",
       use: {
         ...devices["Desktop Chrome"],
         // Honour a pre-installed browser where the environment provides one
@@ -28,6 +29,8 @@ export default defineConfig({
           : {},
       },
     },
+    { name: "iphone", testMatch: "**/mobile-workflows.spec.ts", use: { ...devices["iPhone 13"] } },
+    { name: "android", testMatch: "**/mobile-workflows.spec.ts", use: { ...devices["Pixel 7"] } },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined

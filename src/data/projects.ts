@@ -298,12 +298,12 @@ export function ownProfileQuery(userId: string | null | undefined) {
     queryKey: qk.profile(userId ?? "none"),
     enabled: Boolean(userId),
     staleTime: 5 * 60_000,
-    queryFn: async (): Promise<PersonRef | null> => {
+    queryFn: async (): Promise<(PersonRef & { portal_language: string }) | null> => {
       const { data, error } = await supabase
         .from("profiles")
-        .select(PERSON_REF_COLUMNS)
+        .select(`${PERSON_REF_COLUMNS}, portal_language`)
         .eq("id", userId!)
-        .maybeSingle<PersonRef>();
+        .maybeSingle();
       if (error) throw new DataError("profiles.own", error);
       return data;
     },

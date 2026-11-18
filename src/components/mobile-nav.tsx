@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -151,6 +152,7 @@ export function MobileTabBar({
   workspaceSlot?: React.ReactNode;
 }) {
   const location = useLocation();
+  const t = usePortalText();
   const [moreOpen, setMoreOpen] = useState(false);
   const { tabs, more } = useNavData(isAdmin);
 
@@ -188,7 +190,7 @@ export function MobileTabBar({
             label={`${item.badge} ${item.label === "Inbox" ? "unread" : "waiting"}`}
           />
         </span>
-        <span>{item.label === "My tickets" ? "Tickets" : item.label}</span>
+        <span>{portalLabel(t, item.label === "My tickets" ? "Tickets" : item.label)}</span>
       </Link>
     );
   };
@@ -213,7 +215,7 @@ export function MobileTabBar({
                 <Bug className="h-5 w-5" aria-hidden="true" />
               )}
             </span>
-            <span>{isAdmin ? "New" : "Report"}</span>
+            <span>{isAdmin ? "New" : portalLabel(t, "Report")}</span>
           </Link>
           {right.map(tabLink)}
           <button
@@ -230,7 +232,7 @@ export function MobileTabBar({
               <Menu className="h-[22px] w-[22px]" aria-hidden="true" />
               <MoreDot />
             </span>
-            <span>More</span>
+            <span>{portalLabel(t, "More")}</span>
           </button>
         </div>
       </nav>
@@ -272,6 +274,7 @@ function MoreSheet({
   isAdmin: boolean;
   workspaceSlot?: React.ReactNode;
 }) {
+  const t = usePortalText();
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -348,7 +351,7 @@ function MoreSheet({
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted">
                   <Icon className="h-4 w-4" aria-hidden="true" />
                 </span>
-                <span className="min-w-0 flex-1 leading-tight">{item.label}</span>
+                <span className="min-w-0 flex-1 leading-tight">{portalLabel(t, item.label)}</span>
                 {item.badge ? (
                   <span
                     className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground"

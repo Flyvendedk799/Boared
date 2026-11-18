@@ -1,3 +1,4 @@
+import { PortalLanguageContext } from "@/hooks/use-portal-language";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -136,8 +137,21 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 describe("ClientPlanScreen", () => {
-  it("lays the sections out as columns with the Danish summary and plain task cards", async () => {
+  it("opens an English answer form without translating the client's question", async () => {
     renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Answer now" }));
+    expect(
+      screen.getByLabelText("Your answer: Hvor længe må vi gemme oplysningerne?"),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Send answer" })).toBeDisabled();
+  });
+
+  it("lays the sections out as columns with the Danish summary and plain task cards", async () => {
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
 
     const board = await screen.findByRole("list", { name: "Planens afsnit" });
     expect(within(board).getByRole("heading", { name: "Forbindelse" })).toBeInTheDocument();
@@ -153,7 +167,11 @@ describe("ClientPlanScreen", () => {
 
   it("tells the client up front that a question is waiting, and opens it", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
 
     expect(await screen.findByText(/1 spørgsmål venter på dit svar/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Besvar nu" }));
@@ -163,7 +181,11 @@ describe("ClientPlanScreen", () => {
 
   it("opens a task to what it must deliver, its steps and the conversation", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
 
     await user.click(await screen.findByRole("button", { name: /Sikkert login til Zenegy/ }));
     const dialog = await screen.findByRole("dialog");
@@ -183,7 +205,11 @@ describe("ClientPlanScreen", () => {
 
   it("lets the client answer a question put to them", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
 
     await user.click(await screen.findByRole("button", { name: /Sikkert login til Zenegy/ }));
     const dialog = await screen.findByRole("dialog");
@@ -202,7 +228,11 @@ describe("ClientPlanScreen", () => {
 
   it("lets the client ask their own question and comment on the task", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
 
     await user.click(await screen.findByRole("button", { name: /Sikkert login til Zenegy/ }));
     const dialog = await screen.findByRole("dialog");
@@ -231,17 +261,29 @@ describe("ClientPlanScreen", () => {
   });
 
   it("says so when a section's tasks are not described yet instead of showing nothing", async () => {
-    renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
     expect(await screen.findByText(/bliver beskrevet her/)).toBeInTheDocument();
   });
 
   it("does not warn a client about hidden tasks, but tells the agency preview", async () => {
-    renderWithQuery(<ClientPlanScreen planId="plan-1" />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" />
+      </PortalLanguageContext.Provider>,
+    );
     await screen.findByRole("list", { name: "Planens afsnit" });
     expect(screen.queryByText(/hidden because/)).not.toBeInTheDocument();
     cleanup();
 
-    renderWithQuery(<ClientPlanScreen planId="plan-1" preview />);
+    renderWithQuery(
+      <PortalLanguageContext.Provider value="da">
+        <ClientPlanScreen planId="plan-1" preview />
+      </PortalLanguageContext.Provider>,
+    );
     expect(
       await screen.findByText(/3 tasks are hidden because they have no client title/),
     ).toBeInTheDocument();
