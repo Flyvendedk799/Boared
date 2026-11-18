@@ -23,7 +23,7 @@ import { linkTickets, unlinkTickets, updateTicket } from "@/lib/tickets.function
 import { notifyTicketChanged } from "@/lib/notifications.functions";
 import { autoTriageTicket, summarizeTicket } from "@/lib/ai.functions";
 import { startTimer, stopTimer } from "@/lib/time.functions";
-import { ticketRelationsQuery } from "@/data/tickets";
+import { ticketSearchQuery, ticketRelationsQuery } from "@/data/tickets";
 import { TicketPlanLink } from "@/features/tickets/ticket-plan-link";
 import { LabelEditor } from "@/features/tickets/label-editor";
 import { repoWebUrl } from "@/lib/github-url";
@@ -69,6 +69,7 @@ function useTicketUpdate(ticket: TicketDetail) {
  */
 export function TicketQuickStatus({ ticket }: { ticket: TicketDetail }) {
   const update = useTicketUpdate(ticket);
+  const { user } = useAuth();
   const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,34 +80,46 @@ export function TicketQuickStatus({ ticket }: { ticket: TicketDetail }) {
   }, [ticket.status]);
 
   return (
-    <div
-      ref={rowRef}
-      role="group"
-      aria-label="Change status"
-      className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain px-4 py-0.5 md:hidden"
-    >
-      {TICKET_STATUSES.map((value) => {
-        const active = ticket.status === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={active}
-            disabled={update.busy}
-            onClick={() => {
-              if (!active) update.fire({ ticketId: ticket.id, status: value });
-            }}
-            className={`h-11 shrink-0 snap-start rounded-full border px-4 text-sm transition-colors disabled:opacity-60 ${
-              active
-                ? "border-primary bg-accent font-medium"
-                : "bg-card text-muted-foreground active:bg-muted"
-            }`}
-          >
-            {TICKET_STATUS_LABEL[value]}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      {user && !ticket.assignee_id && (
+        <Button
+          className="w-full md:hidden"
+          variant="outline"
+          disabled={update.busy}
+          onClick={() => update.fire({ ticketId: ticket.id, assigneeId: user.id })}
+        >
+          Assign to me
+        </Button>
+      )}
+      <div
+        ref={rowRef}
+        role="group"
+        aria-label="Change status"
+        className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto overscroll-x-contain px-4 py-0.5 md:hidden"
+      >
+        {TICKET_STATUSES.map((value) => {
+          const active = ticket.status === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={active}
+              disabled={update.busy}
+              onClick={() => {
+                if (!active) update.fire({ ticketId: ticket.id, status: value });
+              }}
+              className={`h-11 shrink-0 snap-start rounded-full border px-4 text-sm transition-colors disabled:opacity-60 ${
+                active
+                  ? "border-primary bg-accent font-medium"
+                  : "bg-card text-muted-foreground active:bg-muted"
+              }`}
+            >
+              {TICKET_STATUS_LABEL[value]}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -439,6 +452,9 @@ function RelationsCard({
   const [adding, setAdding] = useState(false);
   const [number, setNumber] = useState("");
 
+  const { workspaceId } = useAuth();
+  const matches = useQuery(ticketSearchQuery(number, workspaceId));
+  const [kind, setKind] = useState<keyof typeof TICKET_RELATION_LABEL>("relates_to");
   const link = useServerAction(useServerFn(linkTickets), {
     label: "tickets.link",
     success: "Linked",
@@ -505,28 +521,42 @@ function RelationsCard({
       </ul>
 
       {adding && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            // Linking by number would need a lookup; paste the id for now.
-            link.fire({ fromTicketId: ticketId, toTicketId: number.trim(), kind: "relates_to" });
-          }}
-          className="flex gap-1.5"
-        >
+        <div className="space-y-2">
+          <select
+            aria-label="Relationship"
+            className="h-11 w-full rounded border bg-background"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as typeof kind)}
+          >
+            {Object.entries(TICKET_RELATION_LABEL).map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
           <Input
+            aria-label="Find ticket"
+            placeholder="Title or #number"
             value={number}
             onChange={(e) => setNumber(e.target.value)}
-            placeholder="Ticket id"
-            aria-label="Ticket to link"
-            className="h-8"
-            autoComplete="off"
-            autoCapitalize="none"
-            enterKeyHint="done"
           />
-          <Button type="submit" size="sm" disabled={link.busy || !number.trim()}>
-            Link
-          </Button>
-        </form>
+          {matches.data
+            ?.filter((t) => t.id !== ticketId)
+            .map((t) => (
+              <Button
+                className="h-auto min-h-11 w-full justify-start whitespace-normal text-left"
+                key={t.id}
+                variant="outline"
+                disabled={link.busy}
+                onClick={() => link.fire({ fromTicketId: ticketId, toTicketId: t.id, kind })}
+              >
+                #{t.ticket_number} · {t.title} · {t.project?.title}
+              </Button>
+            ))}
+          {number && matches.isSuccess && !matches.data.some((t) => t.id !== ticketId) && (
+            <p>No matching tickets.</p>
+          )}
+        </div>
       )}
     </Card>
   );

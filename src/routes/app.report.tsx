@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -49,7 +50,7 @@ import { createTicket } from "@/lib/tickets.functions";
 import { composeTicketFromCapture } from "@/lib/ai/compose.functions";
 import { useAiEnabled } from "@/hooks/use-ai-enabled";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { describeOutcome, newDraftId, uploadDrafts, type DraftAttachment } from "@/lib/upload";
+import { newDraftId, uploadDrafts, type DraftAttachment } from "@/lib/upload";
 import { projectListQuery } from "@/data/projects";
 import { qk } from "@/data/keys";
 import {
@@ -76,10 +77,11 @@ export const Route = createFileRoute("/app/report")({
     project: z.string().uuid().optional(),
     url: z.string().optional(),
   }),
-  component: ReportPage,
+  component: function ScopedReportPage() {
+    const { user, workspaceId } = useAuth();
+    return <ReportPage key={workspaceId + "." + user?.id} />;
+  },
 });
-
-const REPORT_DRAFT_KEY = "cf.report.form";
 
 type ReportDraft = {
   projectId?: string;
@@ -89,9 +91,9 @@ type ReportDraft = {
   priority: TicketPriority;
 };
 
-function readReportDraft(): Partial<ReportDraft> {
+function readReportDraft(key: string): Partial<ReportDraft> {
   try {
-    const raw = sessionStorage.getItem(REPORT_DRAFT_KEY);
+    const raw = sessionStorage.getItem(key);
     if (!raw) return {};
     return JSON.parse(raw) as Partial<ReportDraft>;
   } catch {
@@ -100,6 +102,7 @@ function readReportDraft(): Partial<ReportDraft> {
 }
 
 function ReportPage() {
+  const tr = usePortalText();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const router = useRouter();
@@ -107,7 +110,8 @@ function ReportPage() {
   const [leaving, setLeaving] = useState(false);
   const { user, isAdmin, workspaceId } = useAuth();
   const aiEnabled = useAiEnabled();
-  const saved = useMemo(() => readReportDraft(), []);
+  const draftKey = "cf.report.form." + workspaceId + "." + user?.id;
+  const saved = useMemo(() => readReportDraft(draftKey), [draftKey]);
 
   const [projectId, setProjectId] = useState<string | undefined>(search.project ?? saved.projectId);
   const [drafts, setDrafts] = useState<DraftAttachment[]>([]);
@@ -128,7 +132,18 @@ function ReportPage() {
   );
 
   const projects = useQuery(projectListQuery(workspaceId));
-  const chosenProject = projects.data?.find((p) => p.id === projectId) ?? projects.data?.[0];
+  const [receipt, setReceipt] = useState<{
+    id: string;
+    number: number | null;
+    total: number;
+  } | null>(null);
+  const [sending, setSending] = useState(false);
+  const submitting = useRef(false);
+  const [problems, setProblems] = useState<string[]>([]);
+  const attachmentIds = useRef(new Map<string, string>());
+  const chosenProject =
+    projects.data?.find((p) => p.id === projectId) ??
+    (projects.data?.length === 1 ? projects.data[0] : undefined);
 
   // Prefer `?project=` over a stale draft when the URL carries one.
   useEffect(() => {
@@ -143,16 +158,24 @@ function ReportPage() {
   useEffect(() => {
     try {
       const payload: ReportDraft = { projectId, title, description, type, priority };
-      sessionStorage.setItem(REPORT_DRAFT_KEY, JSON.stringify(payload));
+      sessionStorage.setItem(draftKey, JSON.stringify(payload));
     } catch {
       /* ignore */
     }
-  }, [projectId, title, description, type, priority]);
+  }, [draftKey, projectId, title, description, type, priority]);
 
   // Object URLs outlive the component unless they are revoked.
+  const previews = useRef(new Set<string>());
+  useEffect(() => {
+    const next = new Set(drafts.flatMap((d) => (d.previewUrl ? [d.previewUrl] : [])));
+    for (const url of previews.current) if (!next.has(url)) URL.revokeObjectURL(url);
+    previews.current = next;
+  }, [drafts]);
   useEffect(
-    () => () => drafts.forEach((d) => d.previewUrl && URL.revokeObjectURL(d.previewUrl)),
-    [drafts],
+    () => () => {
+      for (const url of previews.current) URL.revokeObjectURL(url);
+    },
+    [],
   );
 
   const addFiles = useCallback((files: File[], kind: DraftAttachment["kind"] = "file") => {
@@ -214,9 +237,14 @@ function ReportPage() {
 
     try {
       const blob = await flattenToBlob(image, doc);
-      const annotated = new File([blob], draft.file.name.replace(/(\.\w+)?$/, "-marked.webp"), {
-        type: blob.type,
-      });
+      const extension = blob.type === "image/png" ? "png" : "webp";
+      const annotated = new File(
+        [blob],
+        draft.file.name.replace(/(\.\w+)?$/, `-marked.${extension}`),
+        {
+          type: blob.type,
+        },
+      );
 
       setDrafts((prev) => {
         const withoutOriginal = redactsContent(doc);
@@ -265,30 +293,48 @@ function ReportPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!chosenProject || !user) return;
-
-    const { id } = await create.run({
-      projectId: chosenProject.id,
-      title: title.trim(),
-      description: description.trim() || undefined,
-      type,
-      priority,
-      context: contextRef.current,
-    });
-
-    if (drafts.length > 0) {
-      const outcome = await uploadDrafts(id, user.id, drafts);
-      const problem = describeOutcome(outcome);
-      if (problem) toast.error(problem);
-    }
-
-    toast.success("Sent. We'll pick it up from here.");
+    if (!chosenProject || !user || submitting.current) return;
+    submitting.current = true;
+    setSending(true);
     try {
-      sessionStorage.removeItem(REPORT_DRAFT_KEY);
+      const ticket = receipt ?? {
+        ...(await create.run({
+          projectId: chosenProject.id,
+          title: title.trim(),
+          description: description.trim() || undefined,
+          type,
+          priority,
+          context: contextRef.current,
+        })),
+        total: drafts.length,
+      };
+      setReceipt(ticket);
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch {
+        /* storage is optional */
+      }
+      const outcome = await uploadDrafts(
+        ticket.id,
+        user.id,
+        drafts,
+        undefined,
+        attachmentIds.current,
+      );
+      if (outcome.failed.length) {
+        const failed = new Set(outcome.failed.map((file) => file.draftId));
+        setDrafts(drafts.filter((file) => failed.has(file.id)));
+        setProblems(outcome.failed.map((file) => file.name + " — " + file.reason));
+        return;
+      }
+      toast.success(tr("Report sent", "Sagen er sendt"));
+      void navigate({ to: "/app/tickets/$ticketId", params: { ticketId: ticket.id } });
     } catch {
-      /* ignore */
+      // create.run displays its own error. Upload errors are returned per file.
+    } finally {
+      submitting.current = false;
+      setSending(false);
     }
-    void navigate({ to: "/app/tickets/$ticketId", params: { ticketId: id } });
   };
 
   const contextSummary = useMemo(() => summariseContext(contextRef.current), []);
@@ -305,14 +351,17 @@ function ReportPage() {
     return (
       <>
         <MobileBackBar onBack={goBack} />
-        <PageHeader title="Report an issue" />
+        <PageHeader title={tr("Report an issue", "Indberet en sag")} />
         <div className="mx-auto max-w-2xl px-4 py-16">
           <EmptyState
-            title="No projects yet"
+            title={tr("No projects yet", "Ingen projekter endnu")}
             description={
               isAdmin
                 ? "Create a project first. Tickets hang off projects, so there's nowhere to file this yet."
-                : "Once you've been added to a project you can report things against it."
+                : tr(
+                    "Once you've been added to a project you can report things against it.",
+                    "Når du er blevet føjet til et projekt, kan du indberette sager på det.",
+                  )
             }
             action={
               isAdmin ? (
@@ -321,7 +370,7 @@ function ReportPage() {
                 </Button>
               ) : (
                 <Button variant="outline" asChild>
-                  <Link to="/app/inbox">Check your inbox</Link>
+                  <Link to="/app/inbox">{tr("Check your inbox", "Tjek din indbakke")}</Link>
                 </Button>
               )
             }
@@ -330,6 +379,43 @@ function ReportPage() {
       </>
     );
   }
+
+  if (receipt)
+    return (
+      <form onSubmit={submit} className="mx-auto max-w-lg space-y-4 p-6">
+        <h1 className="font-display text-2xl">
+          {tr(`Ticket #${receipt.number} created`, `Sag #${receipt.number} er oprettet`)}
+        </h1>
+        <p role="status">
+          {sending
+            ? tr("Attaching files…", "Vedhæfter filer…")
+            : tr(
+                `${receipt.total - drafts.length} of ${receipt.total} files attached`,
+                `${receipt.total - drafts.length} af ${receipt.total} filer vedhæftet`,
+              )}
+        </p>
+        <ul>
+          {problems.map((problem, i) => (
+            <li key={i}>{problem}</li>
+          ))}
+        </ul>
+        {problems.length > 0 && (
+          <Button disabled={sending}>
+            {tr("Retry failed files", "Prøv igen med de manglende filer")}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={sending}
+          onClick={() =>
+            void navigate({ to: "/app/tickets/$ticketId", params: { ticketId: receipt.id } })
+          }
+        >
+          {tr("Open ticket", "Åbn sag")}
+        </Button>
+      </form>
+    );
 
   if (annotating) {
     const annotatorProps = {
@@ -354,12 +440,15 @@ function ReportPage() {
     return (
       <>
         <PageHeader
-          title="Point at the problem"
-          description="Circle it, draw an arrow, or blur out anything private."
+          title={tr("Point at the problem", "Vis problemet")}
+          description={tr(
+            "Circle it, draw an arrow, or blur out anything private.",
+            "Sæt en ring, tegn en pil eller slør private oplysninger.",
+          )}
           action={
             <Button variant="ghost" onClick={() => setAnnotating(null)}>
               <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Back
+              {tr("Back", "Tilbage")}
             </Button>
           }
         />
@@ -383,10 +472,13 @@ function ReportPage() {
 
       <div>
         <h1 className="font-display text-[38px] font-normal leading-tight max-md:text-[30px]">
-          Point at the problem
+          {tr("Point at the problem", "Vis problemet")}
         </h1>
         <p className="mt-1.5 leading-normal text-muted-foreground max-md:text-[15px]">
-          A screenshot or a short recording is usually enough. Add a sentence on what you expected.
+          {tr(
+            "A screenshot or a short recording is usually enough. Add a sentence on what you expected.",
+            "Et skærmbillede eller en kort optagelse er som regel nok. Skriv også, hvad du forventede.",
+          )}
         </p>
       </div>
 
@@ -395,15 +487,18 @@ function ReportPage() {
           drafts={drafts}
           onAdd={(files) => addFiles(files)}
           onRemove={(id) => setDrafts((prev) => prev.filter((d) => d.id !== id))}
-          label="Screenshot"
-          title="Screenshot"
-          description="Paste, drop, or choose an image. You can mark it up."
+          label={tr("Screenshot", "Skærmbillede")}
+          title={tr("Screenshot", "Skærmbillede")}
+          description={tr(
+            "Paste, drop, or choose an image. You can mark it up.",
+            "Indsæt, træk eller vælg et billede. Du kan tegne på det.",
+          )}
           touchPicker
           onCaptureScreen={() => void takeScreenshot()}
           actions={
             <Button type="button" variant="outline" size="sm" onClick={() => void takeScreenshot()}>
               <Camera className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Capture this screen
+              {tr("Capture this screen", "Tag et skærmbillede")}
             </Button>
           }
         />
@@ -440,22 +535,24 @@ function ReportPage() {
               >
                 <img
                   src={draft.previewUrl}
-                  alt={`Mark up ${draft.file.name}`}
+                  alt={tr(`Mark up ${draft.file.name}`, `Markér på ${draft.file.name}`)}
                   className="h-full w-full object-cover"
                 />
                 <span className="absolute inset-0 grid place-items-center bg-foreground/60 text-xs font-medium text-background opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:h-9 max-md:bg-foreground/70 max-md:text-[13px] max-md:opacity-100">
-                  <span className="max-md:hidden">Mark it up</span>
-                  <span className="md:hidden">Tap to mark it up</span>
+                  <span className="max-md:hidden">{tr("Mark it up", "Markér på billedet")}</span>
+                  <span className="md:hidden">
+                    {tr("Tap to mark it up", "Tryk for at markere")}
+                  </span>
                 </span>
                 {draft.kind === "annotated" && (
                   <span className="absolute right-1 top-1 max-md:left-1.5 max-md:right-auto max-md:top-1.5">
-                    <StatusPill tone="success">Marked</StatusPill>
+                    <StatusPill tone="success">{tr("Marked", "Markeret")}</StatusPill>
                   </span>
                 )}
               </button>
               <button
                 type="button"
-                aria-label={`Remove ${draft.file.name}`}
+                aria-label={tr(`Remove ${draft.file.name}`, `Fjern ${draft.file.name}`)}
                 onClick={() => setDrafts((prev) => prev.filter((d) => d.id !== draft.id))}
                 className="absolute -right-1.5 -top-1.5 hidden h-11 w-11 place-items-center max-md:grid"
               >
@@ -470,7 +567,7 @@ function ReportPage() {
 
       <div className="flex flex-col gap-2">
         <div id="kind-label" className="text-xs font-medium text-muted-foreground">
-          What kind of thing is it?
+          {tr("What kind of thing is it?", "Hvilken type sag er det?")}
         </div>
         <div
           role="group"
@@ -487,7 +584,7 @@ function ReportPage() {
                 type === value ? "border-primary bg-accent font-medium" : "bg-card hover:bg-muted"
               }`}
             >
-              {TICKET_TYPE_LABEL[value]}
+              {portalLabel(tr, TICKET_TYPE_LABEL[value])}
             </button>
           ))}
         </div>
@@ -496,11 +593,11 @@ function ReportPage() {
       {(projects.data?.length ?? 0) > 1 && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="project" className="text-xs text-muted-foreground">
-            Project
+            {tr("Project", "Projekt")}
           </Label>
           <Select value={projectId} onValueChange={setProjectId}>
             <SelectTrigger id="project" className="h-[42px]">
-              <SelectValue placeholder="Pick a project" />
+              <SelectValue placeholder={tr("Pick a project", "Vælg et projekt")} />
             </SelectTrigger>
             <SelectContent>
               {(projects.data ?? []).map((project) => (
@@ -515,14 +612,17 @@ function ReportPage() {
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="title" className="text-xs text-muted-foreground">
-          Short title
+          {tr("Short title", "Kort titel")}
         </Label>
         <Input
           id="title"
           required
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Pay now button does nothing on iPhone"
+          placeholder={tr(
+            "e.g. Pay now button does nothing on iPhone",
+            "F.eks. Betalingsknappen virker ikke på iPhone",
+          )}
           autoComplete="off"
           enterKeyHint="next"
           className="h-11 text-[15px]"
@@ -535,7 +635,10 @@ function ReportPage() {
           className="flex items-center gap-2 rounded-xl border bg-accent/30 p-4 text-sm"
         >
           <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
-          Reading what you sent and writing a draft…
+          {tr(
+            "Reading what you sent and writing a draft…",
+            "Læser det indsendte og skriver et udkast…",
+          )}
         </div>
       )}
 
@@ -551,7 +654,9 @@ function ReportPage() {
             setDescription(composeDescription(aiDraft));
             setType(aiDraft.type);
             setPriority(aiDraft.priority);
-            toast.success("Filled in. Edit anything that isn't right.");
+            toast.success(
+              tr("Filled in. Edit anything that isn't right.", "Udfyldt. Du kan nu rette teksten."),
+            );
           }}
         />
       )}
@@ -559,7 +664,7 @@ function ReportPage() {
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center">
           <Label htmlFor="description" className="flex-1 text-xs text-muted-foreground">
-            Details
+            {tr("Details", "Detaljer")}
           </Label>
           {aiEnabled && (
             <button
@@ -569,7 +674,7 @@ function ReportPage() {
               className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50 max-md:-my-2 max-md:-mr-2 max-md:min-h-11 max-md:gap-1.5 max-md:px-2 max-md:text-[13px]"
             >
               <Sparkles className="h-3 w-3" aria-hidden="true" />
-              Write it up with AI
+              {tr("Write it up with AI", "Skriv et udkast med AI")}
             </button>
           )}
         </div>
@@ -578,28 +683,38 @@ function ReportPage() {
           rows={6}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="What happened, and what did you expect?"
+          placeholder={tr(
+            "What happened, and what did you expect?",
+            "Hvad skete der, og hvad forventede du?",
+          )}
           className="px-3.5 py-3 leading-relaxed max-md:min-h-36"
         />
         <p className="text-xs text-muted-foreground max-md:break-words">
-          We&rsquo;ll also send your browser details automatically
+          {tr(
+            "We’ll also send your browser details automatically",
+            "Vi sender også automatisk oplysninger om din browser",
+          )}
           {contextSummary ? `: ${contextSummary}` : ""}.
         </p>
       </div>
 
       <div className="flex flex-col gap-1.5 sm:max-w-xs">
         <Label htmlFor="priority" className="text-xs text-muted-foreground">
-          How urgent?
+          {tr("How urgent?", "Hvor meget haster det?")}
         </Label>
         <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
           <SelectTrigger id="priority">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="low">Whenever you get to it</SelectItem>
-            <SelectItem value="medium">Soon would be good</SelectItem>
-            <SelectItem value="high">It&rsquo;s holding me up</SelectItem>
-            <SelectItem value="urgent">It&rsquo;s costing me money</SelectItem>
+            <SelectItem value="low">{tr("Whenever you get to it", "Når I har tid")}</SelectItem>
+            <SelectItem value="medium">{tr("Soon would be good", "Gerne snart")}</SelectItem>
+            <SelectItem value="high">
+              {tr("It’s holding me up", "Det blokerer mit arbejde")}
+            </SelectItem>
+            <SelectItem value="urgent">
+              {tr("It’s costing me money", "Det koster mig penge")}
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -607,21 +722,23 @@ function ReportPage() {
       <div className="flex justify-end max-md:sticky max-md:bottom-0 max-md:z-30 max-md:-mx-4 max-md:flex-col max-md:border-t max-md:bg-background/95 max-md:px-4 max-md:pb-[calc(0.75rem+var(--safe-bottom)+var(--mobile-timer-h,0px))] max-md:pt-3 max-md:backdrop-blur">
         {!title.trim() && (
           <p className="mb-2 text-center text-xs text-muted-foreground md:hidden">
-            Add a short title to send this.
+            {tr("Add a short title to send this.", "Tilføj en kort titel for at sende sagen.")}
           </p>
         )}
         <Button
           type="submit"
           className="h-11 px-6 max-md:h-12 max-md:w-full max-md:text-base"
-          disabled={create.busy || !title.trim() || !chosenProject}
+          disabled={sending || create.busy || !title.trim() || !chosenProject}
         >
           {create.busy ? (
             <>
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
-              Sending
+              {tr("Sending", "Sender")}
             </>
+          ) : chosenProject ? (
+            tr("Send to ", "Send til ") + chosenProject.title
           ) : (
-            "Send"
+            tr("Choose a project to send", "Vælg et projekt for at sende")
           )}
         </Button>
       </div>
@@ -629,14 +746,19 @@ function ReportPage() {
       <AlertDialog open={leaving} onOpenChange={setLeaving}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave without sending?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {tr("Leave without sending?", "Forlad uden at sende?")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              What you typed is kept, but the photos and recordings you added aren&rsquo;t.
+              {tr(
+                "Your text will be saved. Any attached photos and recordings will be lost.",
+                "Din tekst gemmes. Vedhæftede billeder og optagelser går tabt.",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep working</AlertDialogCancel>
-            <AlertDialogAction onClick={goBack}>Leave</AlertDialogAction>
+            <AlertDialogCancel>{tr("Keep working", "Fortsæt med sagen")}</AlertDialogCancel>
+            <AlertDialogAction onClick={goBack}>{tr("Leave", "Forlad")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -646,6 +768,7 @@ function ReportPage() {
 
 /** The way out of the report flow on a phone, where the tab bar is not there to leave by. */
 function MobileBackBar({ onBack, close = false }: { onBack: () => void; close?: boolean }) {
+  const tr = usePortalText();
   return (
     <div className="-mx-1 flex md:hidden">
       <button
@@ -658,7 +781,7 @@ function MobileBackBar({ onBack, close = false }: { onBack: () => void; close?: 
         ) : (
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         )}
-        {close ? "Close" : "Back"}
+        {close ? tr("Close", "Luk") : tr("Back", "Tilbage")}
       </button>
     </div>
   );
@@ -677,6 +800,7 @@ function AnnotatorStep({
   onSave: (doc: AnnotationDoc) => void;
   mobile?: boolean;
 }) {
+  const tr = usePortalText();
   const [doc, setDoc] = useState(initialDoc);
 
   if (mobile) {
@@ -685,12 +809,12 @@ function AnnotatorStep({
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2">
           <Button type="button" variant="ghost" onClick={onCancel}>
             <X className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Cancel
+            {tr("Cancel", "Annuller")}
           </Button>
-          <h1 className="font-display text-lg">Mark it up</h1>
+          <h1 className="font-display text-lg">{tr("Mark it up", "Markér på billedet")}</h1>
           <Button type="button" onClick={() => onSave(doc)}>
             <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Done
+            {tr("Done", "Færdig")}
           </Button>
         </div>
         <p className="shrink-0 px-4 py-2 text-xs text-muted-foreground">
@@ -709,11 +833,11 @@ function AnnotatorStep({
       <ScreenshotAnnotator image={image} initialDoc={initialDoc} onChange={setDoc} />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
+          {tr("Cancel", "Annuller")}
         </Button>
         <Button type="button" onClick={() => onSave(doc)}>
           <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Done
+          {tr("Done", "Færdig")}
         </Button>
       </div>
     </div>

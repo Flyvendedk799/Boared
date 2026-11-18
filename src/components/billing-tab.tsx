@@ -1,3 +1,5 @@
+import { scrollToFragment } from "@/lib/scroll-to-fragment";
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -45,7 +47,7 @@ import {
   projectQuotesQuery,
   sumLines,
 } from "@/data/billing";
-import { unbilledTimeQuery, formatMinutes, totalMinutes } from "@/data/time";
+import { unbilledTimeQuery, localDayKey, formatMinutes, totalMinutes } from "@/data/time";
 import { qk } from "@/data/keys";
 import {
   INVOICE_STATUS_LABEL,
@@ -63,10 +65,13 @@ const BLANK_LINE: Line = { description: "", unit_price_cents: 0, quantity: 1 };
 export function BillingTab({
   projectId,
   currency = "USD",
+  hourlyRate,
 }: {
   projectId: string;
   currency?: string;
+  hourlyRate?: number | null;
 }) {
+  const tr = usePortalText();
   const { isAdmin } = useAuth();
   const quotes = useQuery(projectQuotesQuery(projectId));
   const invoices = useQuery(projectInvoicesQuery(projectId));
@@ -77,7 +82,7 @@ export function BillingTab({
         <div className="flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 font-display text-xl">
             <FileText className="h-5 w-5" aria-hidden="true" />
-            Quotes
+            {tr("Quotes", "Tilbud")}
           </h3>
           {isAdmin && <NewQuoteButton projectId={projectId} currency={currency} />}
         </div>
@@ -88,11 +93,14 @@ export function BillingTab({
           empty={
             <Card>
               <EmptyState
-                title="No quotes yet"
+                title={tr("No quotes yet", "Ingen tilbud endnu")}
                 description={
                   isAdmin
                     ? "Draft a quote to kick off billing — accepting it turns line items into milestones."
-                    : "Any quote we send you will appear here to accept or decline."
+                    : tr(
+                        "Any quote we send you will appear here to accept or decline.",
+                        "Her kan du acceptere eller afslå vores tilbud.",
+                      )
                 }
                 action={
                   isAdmin ? <NewQuoteButton projectId={projectId} currency={currency} /> : undefined
@@ -115,9 +123,11 @@ export function BillingTab({
         <div className="flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 font-display text-xl">
             <Receipt className="h-5 w-5" aria-hidden="true" />
-            Invoices
+            {tr("Invoices", "Fakturaer")}
           </h3>
-          {isAdmin && <NewInvoiceButton projectId={projectId} currency={currency} />}
+          {isAdmin && (
+            <NewInvoiceButton hourlyRate={hourlyRate} projectId={projectId} currency={currency} />
+          )}
         </div>
 
         <QueryState
@@ -126,15 +136,19 @@ export function BillingTab({
           empty={
             <Card>
               <EmptyState
-                title="No invoices yet"
+                title={tr("No invoices yet", "Ingen fakturaer endnu")}
                 description={
                   isAdmin
                     ? "Raise an invoice when a milestone lands, or bill time you've logged."
-                    : "Nothing outstanding."
+                    : tr("Nothing outstanding.", "Intet udestående.")
                 }
                 action={
                   isAdmin ? (
-                    <NewInvoiceButton projectId={projectId} currency={currency} />
+                    <NewInvoiceButton
+                      hourlyRate={hourlyRate}
+                      projectId={projectId}
+                      currency={currency}
+                    />
                   ) : undefined
                 }
               />
@@ -275,6 +289,7 @@ function LineEditor({
 }
 
 function NewQuoteButton({ projectId, currency }: { projectId: string; currency: string }) {
+  const tr = usePortalText();
   const [open, setOpen] = useState(false);
   const [lines, setLines] = useState<Line[]>([{ ...BLANK_LINE }]);
 
@@ -316,7 +331,7 @@ function NewQuoteButton({ projectId, currency }: { projectId: string; currency: 
           className="space-y-4"
         >
           <div className="space-y-1.5">
-            <Label htmlFor="q-title">Title</Label>
+            <Label htmlFor="q-title">{tr("Title", "Titel")}</Label>
             <Input
               id="q-title"
               name="title"
@@ -355,6 +370,7 @@ function QuoteCard({
   projectId: string;
   canEdit: boolean;
 }) {
+  const tr = usePortalText();
   const navigate = useNavigate();
   const invalidate = [
     qk.projectQuotes(projectId),
@@ -395,13 +411,13 @@ function QuoteCard({
   });
 
   return (
-    <Card className="space-y-3 p-4 sm:p-5">
+    <Card ref={scrollToFragment} id={"quote-" + quote.id} className="space-y-3 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 max-md:flex-nowrap">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="break-words font-medium">{quote.title}</h4>
             <StatusPill tone={QUOTE_STATUS_TONE[quote.status]}>
-              {QUOTE_STATUS_LABEL[quote.status]}
+              {portalLabel(tr, QUOTE_STATUS_LABEL[quote.status])}
             </StatusPill>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -451,7 +467,7 @@ function QuoteCard({
               disabled={respond.busy}
               onClick={() => respond.fire({ quoteId: quote.id, accept: true })}
             >
-              Accept
+              {tr("Accept", "Accepter")}
             </Button>
             <Button
               size="sm"
@@ -460,15 +476,16 @@ function QuoteCard({
               disabled={respond.busy}
               onClick={() => respond.fire({ quoteId: quote.id, accept: false })}
             >
-              Decline
+              {tr("Decline", "Afslå")}
             </Button>
           </>
         )}
         {quote.status === "accepted" && (
           <>
             <p className="w-full text-xs text-muted-foreground">
-              Accepted {quote.responded_at ? formatDate(quote.responded_at) : ""} — the line items
-              are now milestones on this project.
+              {tr("Accepted", "Accepteret")}{" "}
+              {quote.responded_at ? formatDate(quote.responded_at) : ""} — the line items are now
+              milestones on this project.
             </p>
             {canEdit && <InvoiceFromQuoteButton projectId={projectId} quote={quote} />}
           </>
@@ -481,7 +498,7 @@ function QuoteCard({
           onClick={() => doc.fire({ kind: "quote", id: quote.id })}
         >
           <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {doc.busy ? "Preparing…" : "Download"}
+          {doc.busy ? tr("Preparing…", "Forbereder…") : tr("Download", "Hent")}
         </Button>
       </div>
     </Card>
@@ -553,9 +570,20 @@ function InvoiceFromQuoteButton({
   );
 }
 
-function NewInvoiceButton({ projectId, currency }: { projectId: string; currency: string }) {
+function NewInvoiceButton({
+  projectId,
+  currency,
+  hourlyRate,
+}: {
+  projectId: string;
+  currency: string;
+  hourlyRate?: number | null;
+}) {
   const [open, setOpen] = useState(false);
   const [lines, setLines] = useState<Line[]>([{ ...BLANK_LINE }]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const unbilled = useQuery({ ...unbilledTimeQuery(projectId), enabled: open });
 
   const create = useServerAction(useServerFn(createInvoice), {
@@ -563,12 +591,19 @@ function NewInvoiceButton({ projectId, currency }: { projectId: string; currency
     success: (result) => `${result.number ?? "Invoice"} created`,
     invalidate: [qk.projectInvoices(projectId), qk.projectTime(projectId)],
     onSuccess: () => {
+      setSelected([]);
       setOpen(false);
       setLines([{ ...BLANK_LINE }]);
     },
   });
 
-  const unbilledMinutes = totalMinutes(unbilled.data ?? []);
+  const eligible = (unbilled.data ?? []).filter((entry) => {
+    const day = localDayKey(entry.started_at);
+    return (!from || day >= from) && (!to || day <= to);
+  });
+  const included = eligible.filter((entry) => selected.includes(entry.id));
+  const minutes = totalMinutes(included);
+  const charge = Math.round((minutes * (hourlyRate ?? 0)) / 60);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -578,7 +613,7 @@ function NewInvoiceButton({ projectId, currency }: { projectId: string; currency
           New invoice
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New invoice</DialogTitle>
         </DialogHeader>
@@ -591,25 +626,65 @@ function NewInvoiceButton({ projectId, currency }: { projectId: string; currency
               currency,
               dueDate: String(form.get("due")) || undefined,
               lines: lines.filter((l) => l.description.trim()),
-              timeEntryIds: form.get("billTime") ? (unbilled.data ?? []).map((e) => e.id) : [],
+              timeEntryIds: included.map((e) => e.id),
+              timeChargeCents: charge,
+              timeMinutes: minutes,
             });
           }}
           className="space-y-4"
         >
-          {unbilledMinutes > 0 && (
-            <label className="flex items-start gap-2 rounded-md border bg-accent/30 p-3 text-sm max-md:gap-3 max-md:p-3.5">
-              <input
-                type="checkbox"
-                name="billTime"
-                className="mt-0.5 max-md:h-5 max-md:w-5 max-md:shrink-0"
-              />
-              <span>
-                Mark <strong>{formatMinutes(unbilledMinutes)}</strong> of unbilled time as invoiced.
-                Add a line item for it below.
-              </span>
-            </label>
+          {unbilled.isError && <p role="alert">Could not load billable time.</p>}
+          {Boolean(unbilled.data?.length) && (
+            <fieldset className="space-y-2">
+              <legend>Include billable time</legend>
+              <div className="flex flex-wrap gap-2">
+                <label>
+                  From
+                  <Input
+                    type="date"
+                    value={from}
+                    max={to || undefined}
+                    onChange={(e) => setFrom(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Through
+                  <Input
+                    type="date"
+                    value={to}
+                    min={from || undefined}
+                    onChange={(e) => setTo(e.target.value)}
+                  />
+                </label>
+              </div>
+              {hourlyRate == null && <p>Set the project's hourly rate to bill time.</p>}
+              <div className="max-h-40 overflow-auto">
+                {eligible.map((entry) => (
+                  <label key={entry.id} className="flex min-h-11 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      disabled={hourlyRate == null}
+                      checked={selected.includes(entry.id)}
+                      onChange={(e) =>
+                        setSelected(
+                          e.target.checked
+                            ? [...selected, entry.id]
+                            : selected.filter((id) => id !== entry.id),
+                        )
+                      }
+                    />
+                    {localDayKey(entry.started_at)} ·{" "}
+                    {entry.note || entry.ticket?.title || "Project time"} ·{" "}
+                    {formatMinutes(entry.duration_minutes)}
+                  </label>
+                ))}
+              </div>
+              <p>
+                {formatMinutes(minutes)} at {formatCents(hourlyRate ?? 0, currency)}/h ·{" "}
+                {formatCents(charge, currency)}
+              </p>
+            </fieldset>
           )}
-
           <LineEditor lines={lines} onChange={setLines} currency={currency} />
 
           <div className="space-y-1.5">
@@ -622,7 +697,16 @@ function NewInvoiceButton({ projectId, currency }: { projectId: string; currency
           </p>
 
           <DialogFooter>
-            <Button type="submit" disabled={create.busy}>
+            <p>
+              Total{" "}
+              {formatCents(sumLines(lines.filter((l) => l.description.trim())) + charge, currency)}
+            </p>
+            <Button
+              type="submit"
+              disabled={
+                create.busy || (!included.length && !lines.some((l) => l.description.trim()))
+              }
+            >
               {create.busy ? "Creating…" : "Create and send"}
             </Button>
           </DialogFooter>
@@ -641,6 +725,7 @@ function InvoiceCard({
   projectId: string;
   canEdit: boolean;
 }) {
+  const tr = usePortalText();
   const invalidate = [qk.projectInvoices(projectId), qk.projectUpdates(projectId)];
   const outstanding = outstandingCents(invoice);
 
@@ -671,7 +756,7 @@ function InvoiceCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-sm">{invoice.number}</span>
             <StatusPill tone={INVOICE_STATUS_TONE[invoice.status]}>
-              {INVOICE_STATUS_LABEL[invoice.status]}
+              {portalLabel(tr, INVOICE_STATUS_LABEL[invoice.status])}
             </StatusPill>
           </div>
           {invoice.due_date && (
@@ -742,7 +827,7 @@ function InvoiceCard({
             onClick={() => checkout.fire({ invoiceId: invoice.id })}
           >
             <CreditCard className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Pay this invoice
+            {tr("Pay this invoice", "Betal denne faktura")}
           </Button>
         )}
         <Button
@@ -753,7 +838,7 @@ function InvoiceCard({
           onClick={() => doc.fire({ kind: "invoice", id: invoice.id })}
         >
           <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {doc.busy ? "Preparing…" : "Download"}
+          {doc.busy ? tr("Preparing…", "Forbereder…") : tr("Download", "Hent")}
         </Button>
         {!canEdit && checkout.error === null && !checkout.busy && outstanding > 0 && (
           <p className="w-full text-xs text-muted-foreground">

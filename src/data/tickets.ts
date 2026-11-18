@@ -343,13 +343,15 @@ export function ticketContextQuery(ticketId: string) {
 export function ticketSearchQuery(term: string, workspaceId: string | null | undefined) {
   return queryOptions({
     queryKey: [...qk.tickets(), "search", workspaceId ?? "none", term] as const,
-    enabled: Boolean(workspaceId) && term.trim().length >= 2,
+    enabled: Boolean(workspaceId) && term.trim().length >= 1,
     queryFn: async (): Promise<TicketListRow[]> => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select(LIST_SELECT)
-        .eq("workspace_id", workspaceId!)
-        .textSearch("search_tsv", term, { type: "websearch" })
+      const base = supabase.from("tickets").select(LIST_SELECT).eq("workspace_id", workspaceId!);
+      const number = /^#?(\d+)$/.exec(term.trim());
+      const { data, error } = await (
+        number
+          ? base.eq("ticket_number", Number(number[1]))
+          : base.textSearch("search_tsv", term, { type: "websearch" })
+      )
         .order("updated_at", { ascending: false })
         .limit(8)
         .returns<TicketListRow[]>();

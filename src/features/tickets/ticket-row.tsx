@@ -1,3 +1,4 @@
+import { usePortalText } from "@/hooks/use-portal-language";
 import { memo } from "react";
 import { Link } from "@tanstack/react-router";
 import { Paperclip } from "lucide-react";
@@ -31,6 +32,7 @@ export function TicketListHeader({
   onSelectAll?: () => void;
   showProject?: boolean;
 }) {
+  const tr = usePortalText();
   return (
     <div
       className={`flex items-center gap-3 bg-surface px-4 py-2 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground max-md:gap-2 max-md:border-b max-md:py-0 ${
@@ -47,8 +49,10 @@ export function TicketListHeader({
         </button>
       )}
       <span className="w-10 shrink-0 max-md:hidden">#</span>
-      <span className="min-w-0 flex-1 max-md:hidden">Ticket</span>
-      {showProject && <span className="hidden w-24 shrink-0 lg:block">Project</span>}
+      <span className="min-w-0 flex-1 max-md:hidden">{tr("Ticket", "Sag")}</span>
+      {showProject && (
+        <span className="hidden w-24 shrink-0 lg:block">{tr("Project", "Projekt")}</span>
+      )}
       <span className="hidden w-[104px] shrink-0 md:block">SLA</span>
       <span className="w-24 shrink-0 max-md:hidden">Status</span>
       <span className="hidden w-6 shrink-0 md:block" />

@@ -33,7 +33,9 @@ export function ProjectChangeReport({ workspaceId }: { workspaceId: string | nul
     source: "all",
     completedOnly: true,
   });
-  const changes = useQuery(projectChangesQuery(workspaceId, projectId, from, to));
+  const changes = useQuery(
+    projectChangesQuery(workspaceId, projectId, from, to, filters.completedOnly),
+  );
   const rows = useMemo(
     () =>
       changes.data
@@ -75,7 +77,7 @@ export function ProjectChangeReport({ workspaceId }: { workspaceId: string | nul
         <Button
           variant="outline"
           className="max-md:w-full"
-          disabled={!projectId || changes.isLoading}
+          disabled={!changes.isSuccess}
           onClick={exportReport}
         >
           Export Markdown
@@ -177,7 +179,8 @@ export function ProjectChangeReport({ workspaceId }: { workspaceId: string | nul
         <>
           <p className="mt-5 text-xs text-muted-foreground">
             {rows.length} matching changes
-            {changes.data?.limited ? " · Showing the first 500 records per source" : ""}
+            {filters.completedOnly &&
+              " · Each ticket counts once per period when marked done, even if later reopened."}
           </p>
           {rows.length === 0 ? (
             <p className="mt-3 text-sm text-muted-foreground">No changes match these filters.</p>

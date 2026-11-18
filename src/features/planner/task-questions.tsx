@@ -1,3 +1,4 @@
+import { scrollToFragment } from "@/lib/scroll-to-fragment";
 import { useState } from "react";
 import { Bot, ShieldAlert } from "lucide-react";
 import type { QuestionWithPeople, TaskWithAgent } from "@/data";
@@ -57,6 +58,8 @@ export function OpenQuestion({
 
   return (
     <li
+      ref={scrollToFragment}
+      id={"question-" + question.id}
       className={cn(
         "flex flex-col gap-2.5 rounded-xl border bg-card p-3.5",
         question.blocking && "border-destructive/50",
@@ -130,7 +133,7 @@ export function OpenQuestion({
         <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2.5">
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">
-              The question as the client reads it: plain Danish, no jargon
+              The question as the client reads it: their language, no jargon
             </span>
             <Textarea
               value={wording}
@@ -224,7 +227,11 @@ function ResolvedQuestion({
   const answerer = answererOf(question);
   const dismissed = question.status === "dismissed";
   return (
-    <li className="flex flex-col gap-1.5 rounded-xl border bg-surface/60 p-3 text-sm">
+    <li
+      ref={scrollToFragment}
+      id={"question-" + question.id}
+      className="flex flex-col gap-1.5 rounded-xl border bg-surface/60 p-3 text-sm"
+    >
       <div className="flex items-start gap-2">
         <p
           className={cn(
@@ -347,7 +354,7 @@ export function TaskQuestions({ task, actions }: { task: TaskWithAgent; actions:
             value={clientBody}
             onChange={(event) => setClientBody(event.target.value)}
             aria-label="The question as the client reads it"
-            placeholder="The same question in plain Danish, as the client will read it…"
+            placeholder="The same question in their language, as the client will read it…"
             maxLength={QUESTION_BODY_MAX}
             className="min-h-[56px] resize-y bg-background text-sm"
           />

@@ -1,3 +1,4 @@
+import { usePortalText } from "@/hooks/use-portal-language";
 import { useEffect, useId, useRef, useState } from "react";
 import { Camera, FileText, Image as ImageIcon, MonitorUp, Paperclip, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ export function CaptureDropzone({
   /** Phone only, with `touchPicker`: a "capture this screen" button, shown only where the browser can. */
   onCaptureScreen?: () => void;
 }) {
+  const tr = usePortalText();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [announcement, setAnnouncement] = useState("");
@@ -157,16 +159,16 @@ export function CaptureDropzone({
         <div className="grid grid-cols-2 gap-3 md:hidden">
           <PickTile
             icon={<Camera className="h-7 w-7" aria-hidden="true" />}
-            label="Take a photo"
-            hint="Opens your camera"
+            label={tr("Take a photo", "Tag et billede")}
+            hint={tr("Opens your camera", "Åbner dit kamera")}
             accept="image/*"
             capture="environment"
             onFiles={accept}
           />
           <PickTile
             icon={<ImageIcon className="h-7 w-7" aria-hidden="true" />}
-            label="Choose a photo"
-            hint="Photos or screenshots"
+            label={tr("Choose a photo", "Vælg et billede")}
+            hint={tr("Photos or screenshots", "Fotos eller skærmbilleder")}
             accept="image/*"
             multiple
             onFiles={accept}

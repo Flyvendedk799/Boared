@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/app/projects/")({
 });
 
 function ProjectsPage() {
+  const tr = usePortalText();
   const { isAdmin, workspaceId } = useAuth();
   const projects = useQuery(projectListQuery(workspaceId));
   const activity = useQuery(projectActivityQuery(workspaceId));
@@ -68,8 +70,12 @@ function ProjectsPage() {
   return (
     <>
       <PageHeader
-        title="Projects"
-        description={isAdmin ? "Every engagement you're running." : "What we're building for you."}
+        title={tr("Projects", "Projekter")}
+        description={
+          isAdmin
+            ? "Every engagement you're running."
+            : tr("What we're building for you.", "Det bygger vi for dig.")
+        }
         action={
           isAdmin ? (
             <>
@@ -78,7 +84,9 @@ function ProjectsPage() {
                 className="max-md:flex-1"
                 onClick={() => setShowArchived((value) => !value)}
               >
-                {showArchived ? "Hide archived" : "Show archived"}
+                {showArchived
+                  ? tr("Hide archived", "Skjul arkiverede")
+                  : tr("Show archived", "Vis arkiverede")}
               </Button>
               <NewProjectButton className="max-md:flex-1" />
             </>
@@ -93,7 +101,7 @@ function ProjectsPage() {
           empty={
             <div className="rounded-[14px] border bg-card">
               <EmptyState
-                title="No projects yet"
+                title={tr("No projects yet", "Ingen projekter endnu")}
                 description={
                   isAdmin
                     ? "Create one and invite your client — everything else hangs off it."
@@ -104,7 +112,7 @@ function ProjectsPage() {
                     <NewProjectButton />
                   ) : (
                     <Button variant="outline" asChild>
-                      <Link to="/app/inbox">Check your inbox</Link>
+                      <Link to="/app/inbox">{tr("Check your inbox", "Tjek din indbakke")}</Link>
                     </Button>
                   )
                 }
@@ -120,12 +128,12 @@ function ProjectsPage() {
               return (
                 <div className="rounded-[14px] border bg-card">
                   <EmptyState
-                    title="No active projects"
+                    title={tr("No active projects", "Ingen aktive projekter")}
                     description="Archived projects are hidden. Choose “Show archived” to find them."
                     action={
                       isAdmin ? (
                         <Button variant="outline" onClick={() => setShowArchived(true)}>
-                          Show archived
+                          {tr("Show archived", "Vis arkiverede")}
                         </Button>
                       ) : undefined
                     }
@@ -151,7 +159,7 @@ function ProjectsPage() {
                           )}
                         >
                           <StatusPill tone={PROJECT_STATUS_TONE[project.status]}>
-                            {PROJECT_STATUS_LABEL[project.status]}
+                            {portalLabel(tr, PROJECT_STATUS_LABEL[project.status])}
                           </StatusPill>
                           <span className="text-xs tabular-nums text-muted-foreground">
                             {project.progress}%
@@ -215,6 +223,7 @@ function ProjectsPage() {
 }
 
 function NewProjectButton({ className }: { className?: string }) {
+  const tr = usePortalText();
   const [open, setOpen] = useState(false);
   const [orgMode, setOrgMode] = useState<"existing" | "new" | "none">("none");
   const [organizationId, setOrganizationId] = useState<string | undefined>();
@@ -286,7 +295,7 @@ function NewProjectButton({ className }: { className?: string }) {
           className="space-y-4"
         >
           <div className="space-y-1.5">
-            <Label htmlFor="project-title">Title</Label>
+            <Label htmlFor="project-title">{tr("Title", "Titel")}</Label>
             <Input
               id="project-title"
               name="title"
@@ -314,7 +323,7 @@ function NewProjectButton({ className }: { className?: string }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="none">{tr("None", "Ingen")}</SelectItem>
                 {(orgs.data?.length ?? 0) > 0 && (
                   <SelectItem value="existing">Existing client</SelectItem>
                 )}
@@ -325,7 +334,7 @@ function NewProjectButton({ className }: { className?: string }) {
 
           {orgMode === "existing" && (
             <div className="space-y-1.5">
-              <Label htmlFor="organization">Client</Label>
+              <Label htmlFor="organization">{tr("Client", "Kunde")}</Label>
               <Select value={organizationId} onValueChange={setOrganizationId}>
                 <SelectTrigger id="organization">
                   <SelectValue placeholder="Pick a client" />
@@ -357,7 +366,7 @@ function NewProjectButton({ className }: { className?: string }) {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {tr("Cancel", "Annuller")}
             </Button>
             <Button
               type="submit"

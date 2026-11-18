@@ -1,3 +1,5 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
+import { plannerLookup, waitingQuotes } from "@/data/planner-lookup";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -33,6 +35,7 @@ export const Route = createFileRoute("/app/")({
 });
 
 function HomePage() {
+  const t = usePortalText();
   const { user, isAdmin } = useAuth();
   const name = (user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there")
     .toString()
@@ -42,14 +45,16 @@ function HomePage() {
   return (
     <>
       <PageHeader
-        title={greeting}
+        title={t(greeting, "Hej " + name)}
         description={
-          isAdmin ? "Where your client work stands." : "Your projects and what's happening."
+          isAdmin
+            ? "Where your client work stands."
+            : t("Your projects and what's happening.", "Dine projekter og seneste nyt.")
         }
         action={
           !isAdmin && (
             <Button asChild className="max-md:w-full">
-              <Link to="/app/report">Report something</Link>
+              <Link to="/app/report">{t("Report something", "Indberet en sag")}</Link>
             </Button>
           )
         }
@@ -70,6 +75,7 @@ function HomePage() {
  * always one click from the tickets behind it.
  */
 function AdminHome() {
+  const t = usePortalText();
   const { user, workspaceId } = useAuth();
   const viewerId = user?.id ?? "";
 
@@ -152,7 +158,7 @@ function AdminHome() {
                     description="Tickets your clients open will land here. Seed the queue yourself, or invite a client so they can report."
                     action={
                       <Button asChild>
-                        <Link to="/app/report">Report something</Link>
+                        <Link to="/app/report">{t("Report something", "Indberet en sag")}</Link>
                       </Button>
                     }
                   />
@@ -345,8 +351,11 @@ function formatWhen(iso: string) {
  * belong to.
  */
 function ClientHome() {
+  const t = usePortalText();
   const { user, workspaceId } = useAuth();
   const projects = useQuery(projectListQuery(workspaceId));
+  const questions = useQuery(plannerLookup(workspaceId, user?.id, "", true));
+  const quotes = useQuery(waitingQuotes(workspaceId, user?.id));
   const open = useInfiniteQuery({
     ...ticketListQuery(
       { sort: "updated", status: [...OPEN_TICKET_STATUSES] },
@@ -364,11 +373,14 @@ function ClientHome() {
       empty={
         <div className="rounded-[14px] border bg-card">
           <EmptyState
-            title="Nothing shared with you yet"
-            description="Ask your agency to invite you to a project. It'll show up here with tickets, meetings and progress."
+            title={t("Nothing shared with you yet", "Intet er delt med dig endnu")}
+            description={t(
+              "Ask your agency to invite you to a project. It'll show up here with tickets, meetings and progress.",
+              "Bed dit bureau om en invitation til et projekt. Her kan du følge sager, møder og fremskridt.",
+            )}
             action={
               <Button variant="outline" asChild>
-                <Link to="/app/inbox">Open inbox</Link>
+                <Link to="/app/inbox">{t("Open inbox", "Åbn indbakken")}</Link>
               </Button>
             }
           />
@@ -377,6 +389,53 @@ function ClientHome() {
     >
       {(data) => (
         <div className="space-y-6 max-md:space-y-5">
+          <Section id="waiting-on-you" title={t("Waiting on you", "Afventer dig")}>
+            {(questions.isError || quotes.isError) && (
+              <p role="alert">
+                {t(
+                  "Some pending decisions could not be loaded.",
+                  "Nogle afventende beslutninger kunne ikke hentes.",
+                )}
+              </p>
+            )}
+            {(questions.isLoading || quotes.isLoading) && (
+              <p role="status">{t("Loading decisions…", "Henter beslutninger…")}</p>
+            )}
+            {questions.isSuccess &&
+              quotes.isSuccess &&
+              !questions.data.length &&
+              !quotes.data.length && (
+                <p>{t("No decisions waiting.", "Ingen afventende beslutninger.")}</p>
+              )}
+            <ul className="divide-y rounded-xl bg-card">
+              {questions.data?.map((q) => (
+                <li key={q.item_id}>
+                  <Link
+                    className="block p-3 underline"
+                    to="/app/planner/$planId"
+                    params={{ planId: q.plan_id }}
+                    search={{ task: q.task_id ?? undefined }}
+                    hash={"question-" + q.item_id}
+                  >
+                    {t("Answer ·", "Svar ·")} {q.title} · {q.project}
+                  </Link>
+                </li>
+              ))}
+              {quotes.data?.map((q) => (
+                <li key={q.id}>
+                  <Link
+                    className="block p-3 underline"
+                    to="/app/projects/$projectId"
+                    params={{ projectId: q.project_id }}
+                    search={{ tab: "billing" }}
+                    hash={"quote-" + q.id}
+                  >
+                    {t("Review quote ·", "Gennemgå tilbud ·")} {q.title} · {q.project?.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Section>
           <div className="grid grid-cols-1 gap-4 max-md:gap-3 md:grid-cols-2">
             {data
               .filter((project) => project.status !== "archived")
@@ -390,7 +449,7 @@ function ClientHome() {
                 >
                   <div className="flex items-center">
                     <StatusPill tone={PROJECT_STATUS_TONE[project.status]}>
-                      {PROJECT_STATUS_LABEL[project.status]}
+                      {portalLabel(t, PROJECT_STATUS_LABEL[project.status])}
                     </StatusPill>
                     <span className="flex-1" />
                     <span className="text-xs tabular-nums text-muted-foreground">
@@ -424,18 +483,21 @@ function ClientHome() {
 
           <Section
             id="working-on"
-            title="What we are working on for you"
+            title={t("What we are working on for you", "Det arbejder vi på for dig")}
             action={
               <Link to="/app/tickets">
-                <SectionAction>All my tickets</SectionAction>
+                <SectionAction>{t("All my tickets", "Alle mine sager")}</SectionAction>
               </Link>
             }
           >
             {openRows.length === 0 ? (
               <p className="rounded-[14px] border bg-card p-4 text-sm text-muted-foreground">
                 {open.isPending
-                  ? "Loading…"
-                  : "Nothing open right now. If something isn't right, tell us."}
+                  ? t("Loading…", "Henter…")
+                  : t(
+                      "Nothing open right now. If something isn't right, tell us.",
+                      "Ingen åbne sager. Kontakt os, hvis noget ikke virker.",
+                    )}
               </p>
             ) : (
               <RowCard>
@@ -445,7 +507,7 @@ function ClientHome() {
                     title={ticket.title}
                     pill={
                       <StatusPill tone={TICKET_STATUS_TONE[ticket.status]}>
-                        {TICKET_STATUS_LABEL[ticket.status]}
+                        {portalLabel(t, TICKET_STATUS_LABEL[ticket.status])}
                       </StatusPill>
                     }
                     sub={`#${ticket.ticket_number}${ticket.project ? ` · ${ticket.project.title}` : ""}`}

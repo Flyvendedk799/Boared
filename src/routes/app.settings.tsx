@@ -1,3 +1,6 @@
+import { usePortalText } from "@/hooks/use-portal-language";
+import { updatePortalLanguage } from "@/data/mutations";
+import { ownProfileQuery } from "@/data/projects";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -197,7 +200,14 @@ function SettingsPage() {
 }
 
 function ProfileCard() {
+  const tr = usePortalText();
   const { user, roles, workspaceId } = useAuth();
+  const profile = useQuery(ownProfileQuery(user?.id));
+  const language = useDataMutation(
+    "profile.language",
+    (value: string) => updatePortalLanguage(user!.id, value),
+    { invalidate: [qk.profiles()] },
+  );
   const [name, setName] = useState(user?.user_metadata?.full_name ?? "");
 
   const save = useDataMutation(
@@ -221,9 +231,23 @@ function ProfileCard() {
 
   return (
     <Card className="space-y-4 rounded-[14px] p-5 max-md:p-4">
-      <h2 className="font-display text-[22px] leading-tight">Your details</h2>
+      <h2 className="font-display text-[22px] leading-tight">
+        {tr("Your details", "Dine oplysninger")}
+      </h2>
 
       <AvatarField />
+      <label className="block">
+        Portal language / Sprog
+        <select
+          className="block h-11 rounded border bg-background px-3"
+          value={profile.data?.portal_language ?? "en"}
+          disabled={language.busy || !profile.data}
+          onChange={(e) => language.fire(e.target.value)}
+        >
+          <option value="en">English</option>
+          <option value="da">Dansk</option>
+        </select>
+      </label>
 
       <form
         onSubmit={(event) => {
@@ -247,7 +271,7 @@ function ProfileCard() {
           <Input id="email" value={user?.email ?? ""} disabled />
         </div>
         <Button type="submit" size="sm" className="max-md:h-11 max-md:w-full" disabled={save.busy}>
-          {save.busy ? "Saving…" : "Save"}
+          {save.busy ? "Saving…" : tr("Save", "Gem")}
         </Button>
       </form>
 
@@ -280,20 +304,21 @@ function ProfileCard() {
 }
 
 function AppearanceCard() {
+  const tr = usePortalText();
   const { theme, setTheme } = useTheme();
   return (
     <Card className="space-y-3 rounded-[14px] p-5 max-md:p-4">
-      <h2 className="font-display text-[22px] leading-tight">Appearance</h2>
+      <h2 className="font-display text-[22px] leading-tight">{tr("Appearance", "Udseende")}</h2>
       <div className="space-y-1.5">
-        <Label htmlFor="theme">Theme</Label>
+        <Label htmlFor="theme">{tr("Theme", "Tema")}</Label>
         <Select value={theme} onValueChange={(value) => setTheme(value as Theme)}>
           <SelectTrigger id="theme" className="max-w-52 max-md:max-w-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="system">Match my system</SelectItem>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="dark">Dark</SelectItem>
+            <SelectItem value="system">{tr("Match my system", "Følg systemet")}</SelectItem>
+            <SelectItem value="light">{tr("Light", "Lyst")}</SelectItem>
+            <SelectItem value="dark">{tr("Dark", "Mørkt")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -471,7 +496,7 @@ function WorkspaceCard() {
 }
 
 function NotificationsCard() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const prefs = useQuery({
     ...notificationPreferencesQuery(user?.id ?? ""),
     enabled: Boolean(user),
@@ -510,6 +535,21 @@ function NotificationsCard() {
             </p>
           </div>
 
+          {isAdmin && (
+            <label className="flex min-h-11 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={user?.user_metadata?.deadline_reminders === true}
+                onChange={async (e) => {
+                  const { error } = await supabase.auth.updateUser({
+                    data: { deadline_reminders: e.target.checked },
+                  });
+                  if (error) toast.error("Could not save reminder preference");
+                }}
+              />
+              Show upcoming deadlines for my tickets and unassigned tickets while Boared is open
+            </label>
+          )}
           <ul className="space-y-3">
             {KINDS.map((kind) => (
               <li

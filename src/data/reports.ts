@@ -133,58 +133,35 @@ export function projectChangesQuery(
   projectId: string,
   from: string,
   to: string,
+  completedOnly: boolean,
 ) {
   return queryOptions({
-    queryKey: [...qk.reports(workspaceId ?? undefined), "changes", projectId, from, to] as const,
+    queryKey: [
+      ...qk.reports(workspaceId ?? undefined),
+      "changes",
+      projectId,
+      from,
+      to,
+      completedOnly,
+    ] as const,
     enabled: Boolean(workspaceId && projectId && from && to),
     queryFn: async () => {
       const start = `${from}T00:00:00.000Z`;
       const end = new Date(`${to}T00:00:00.000Z`);
       end.setUTCDate(end.getUTCDate() + 1);
       const endIso = end.toISOString();
-      const [ticketsRes, plansRes] = await Promise.all([
-        supabase
-          .from("tickets")
-          .select("id, title, type, status, updated_at, follow_up_kind")
-          .eq("workspace_id", workspaceId!)
-          .eq("project_id", projectId)
-          .gte("updated_at", start)
-          .lt("updated_at", endIso)
-          .order("updated_at", { ascending: false })
-          .limit(500),
-        supabase
-          .from("plans")
-          .select("id")
-          .eq("workspace_id", workspaceId!)
-          .eq("project_id", projectId),
-      ]);
-      if (ticketsRes.error) throw new DataError("reports.changeTickets", ticketsRes.error);
-      if (plansRes.error) throw new DataError("reports.changePlans", plansRes.error);
-      const ticketIds = (ticketsRes.data ?? []).map((ticket) => ticket.id);
-      const planIds = (plansRes.data ?? []).map((plan) => plan.id);
-      const [linkedRes, tasksRes] = await Promise.all([
-        ticketIds.length
-          ? supabase.from("plan_tasks").select("id, ticket_id, plan_id").in("ticket_id", ticketIds)
-          : Promise.resolve({ data: [], error: null }),
-        planIds.length
-          ? supabase
-              .from("plan_tasks")
-              .select("id, title, completed_at, plan_id, status")
-              .in("plan_id", planIds)
-              .is("ticket_id", null)
-              .eq("status", "done")
-              .gte("completed_at", start)
-              .lt("completed_at", endIso)
-              .limit(500)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-      if (linkedRes.error) throw new DataError("reports.changeLinks", linkedRes.error);
-      if (tasksRes.error) throw new DataError("reports.changeTasks", tasksRes.error);
-      return {
-        tickets: ticketsRes.data ?? [],
-        linkedTasks: linkedRes.data ?? [],
-        standaloneTasks: tasksRes.data ?? [],
-        limited: (ticketsRes.data?.length ?? 0) === 500 || (tasksRes.data?.length ?? 0) === 500,
+      const { data, error } = await supabase.rpc("project_change_period", {
+        _project: projectId,
+        _from: start,
+        _to: endIso,
+        _completed: completedOnly,
+      });
+      if (error) throw new DataError("reports.projectChanges", error);
+      type Sources = Parameters<typeof compileProjectChanges>;
+      return data as unknown as {
+        tickets: Sources[0];
+        linkedTasks: Sources[1];
+        standaloneTasks: Sources[2];
       };
     },
   });

@@ -35,6 +35,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useTheme } from "@/components/theme-provider";
 import { useHotkeys, SHORTCUTS } from "@/lib/use-hotkeys";
 import { ticketSearchQuery } from "@/data/tickets";
+import { plannerLookup } from "@/data/planner-lookup";
 import { projectSearchQuery } from "@/data/projects";
 import { TICKET_STATUS_LABEL } from "@/data/enums";
 import { OPEN_EVENT } from "@/components/command-palette-events";
@@ -52,7 +53,7 @@ export function CommandPalette() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [term, setTerm] = useState("");
   const navigate = useNavigate();
-  const { isAdmin, workspaceId } = useAuth();
+  const { user, isAdmin, workspaceId } = useAuth();
   const { resolved, toggle } = useTheme();
 
   // Debounced: the palette fires on every keystroke otherwise.
@@ -62,6 +63,7 @@ export function CommandPalette() {
     return () => clearTimeout(id);
   }, [term]);
 
+  const planner = useQuery(plannerLookup(workspaceId, user?.id, open ? debounced : ""));
   const tickets = useQuery({
     ...ticketSearchQuery(debounced, workspaceId),
     enabled: open && Boolean(workspaceId) && debounced.length >= 2,
@@ -124,7 +126,7 @@ export function CommandPalette() {
               {tickets.data!.map((ticket) => (
                 <CommandItem
                   key={ticket.id}
-                  value={`ticket-${ticket.id}-${ticket.title}`}
+                  value={`ticket-${ticket.id}-#${ticket.ticket_number}-${ticket.title}`}
                   onSelect={() =>
                     run(
                       () =>
@@ -145,6 +147,32 @@ export function CommandPalette() {
             </CommandGroup>
           )}
 
+          {!!planner.data?.length && (
+            <CommandGroup heading="Planner">
+              {planner.data.map((item) => (
+                <CommandItem
+                  key={item.item_id}
+                  value={item.kind + " " + item.title + " " + item.item_id}
+                  onSelect={() =>
+                    run(
+                      () =>
+                        void navigate({
+                          to: "/app/planner/$planId",
+                          params: { planId: item.plan_id },
+                          search: { task: item.task_id ?? undefined },
+                          hash: item.kind === "Question" ? "question-" + item.item_id : undefined,
+                        }),
+                    )
+                  }
+                >
+                  <span>{item.title}</span>
+                  <CommandShortcut>
+                    {item.project} · {item.kind}
+                  </CommandShortcut>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           {(projects.data?.length ?? 0) > 0 && (
             <CommandGroup heading="Projects">
               {projects.data!.map((project) => (

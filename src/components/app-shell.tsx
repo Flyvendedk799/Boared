@@ -1,3 +1,6 @@
+import { PortalLanguageContext, usePortalText, portalLabel } from "@/hooks/use-portal-language";
+import { ownProfileQuery } from "@/data/projects";
+import { DeadlineReminder } from "@/features/tickets/deadline-reminder";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -39,6 +42,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, isAdmin, loading, rolesStatus, refetchRoles, needsWorkspace, workspace } =
     useAuth();
+  const profile = useQuery(ownProfileQuery(user?.id));
+  const language = profile.data?.portal_language === "da" ? "da" : "en";
   const branded = brandStyle(workspace?.brand_color);
   const keyboardOpen = useKeyboardOpen();
   const onCreateWorkspace = location.pathname.startsWith("/app/create-workspace");
@@ -101,38 +106,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   } as React.CSSProperties;
 
   return (
-    <AssistantProvider>
-      <div className="flex min-h-screen bg-background" style={chromeVars}>
-        <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col border-r bg-sidebar md:flex">
-          <SidebarInner isAdmin={isAdmin} onNavigate={() => {}} />
-        </aside>
+    <PortalLanguageContext.Provider value={language}>
+      <AssistantProvider>
+        <div className="flex min-h-screen bg-background" lang={language} style={chromeVars}>
+          <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col border-r bg-sidebar md:flex">
+            <SidebarInner isAdmin={isAdmin} onNavigate={() => {}} />
+          </aside>
 
-        {!focusedFlow && (
-          <MobileTopBar
-            branded={branded}
-            workspaceName={workspace?.name ?? "Workspace"}
-            logoUrl={workspace?.logo_url}
-          />
-        )}
+          {!focusedFlow && (
+            <MobileTopBar
+              branded={branded}
+              workspaceName={workspace?.name ?? "Workspace"}
+              logoUrl={workspace?.logo_url}
+            />
+          )}
 
-        <main
-          id="main"
-          className="min-w-0 flex-1 max-md:pt-[var(--mobile-topbar-h)] max-md:pb-[calc(var(--mobile-tabbar-h)+var(--mobile-timer-h))]"
-        >
-          {children}
-        </main>
+          <main
+            id="main"
+            className="min-w-0 flex-1 max-md:pt-[var(--mobile-topbar-h)] max-md:pb-[calc(var(--mobile-tabbar-h)+var(--mobile-timer-h))]"
+          >
+            {isAdmin && user.user_metadata?.deadline_reminders === true && (
+              <DeadlineReminder workspaceId={workspace!.id} userId={user.id} />
+            )}
+            {children}
+          </main>
 
-        {!tabBarHidden && (
-          <MobileTabBar isAdmin={isAdmin} workspaceSlot={<WorkspaceSwitcher compact />} />
-        )}
+          {!tabBarHidden && (
+            <MobileTabBar isAdmin={isAdmin} workspaceSlot={<WorkspaceSwitcher compact />} />
+          )}
 
-        <CommandPalette />
-        {/* The Time screen has its own, larger timer card. */}
-        {!location.pathname.startsWith("/app/time") && <RunningTimerBar />}
-        {/* Above the tab bar on a phone, and above the timer bar when it is up. */}
-        <AssistantRoot hidden={tabBarHidden} />
-      </div>
-    </AssistantProvider>
+          <CommandPalette />
+          {/* The Time screen has its own, larger timer card. */}
+          {!location.pathname.startsWith("/app/time") && <RunningTimerBar />}
+          {/* Above the tab bar on a phone, and above the timer bar when it is up. */}
+          <AssistantRoot hidden={tabBarHidden} />
+        </div>
+      </AssistantProvider>
+    </PortalLanguageContext.Provider>
   );
 }
 
@@ -235,6 +245,7 @@ function SearchJumpButton({ onNavigate }: { onNavigate: () => void }) {
 }
 
 function SidebarInner({ isAdmin, onNavigate }: { isAdmin: boolean; onNavigate: () => void }) {
+  const t = usePortalText();
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut, workspaceId } = useAuth();
@@ -283,7 +294,7 @@ function SidebarInner({ isAdmin, onNavigate }: { isAdmin: boolean; onNavigate: (
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
-                  <span className="flex-1">{item.label}</span>
+                  <span className="flex-1">{portalLabel(t, item.label)}</span>
                   {item.badge ? (
                     <span
                       className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground"

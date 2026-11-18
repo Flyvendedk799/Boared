@@ -17,7 +17,7 @@ export const AUDIENCE_LABEL: Record<Audience, string> = {
 export const AUDIENCE_HINT: Record<Audience, string> = {
   agency: "For you and the team",
   agent: "An AI agent should answer",
-  client: "The client answers, in plain Danish",
+  client: "The client answers, in their language",
 };
 
 export function audienceOf(question: { audience?: string | null }): Audience {

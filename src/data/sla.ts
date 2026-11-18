@@ -29,3 +29,24 @@ export function slaPoliciesQuery(workspaceId: string | null | undefined) {
     },
   });
 }
+
+export function deadlineReminderQuery(workspaceId: string, userId: string) {
+  return queryOptions({
+    queryKey: [...qk.tickets(), "reminders", workspaceId, userId],
+    refetchInterval: 60_000,
+    staleTime: 0,
+    queryFn: async () => {
+      const horizon = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("id,title,ticket_number,sla_due_at,status")
+        .eq("workspace_id", workspaceId)
+        .or(`assignee_id.eq.${userId},assignee_id.is.null`)
+        .not("status", "in", "(done,wont_fix)")
+        .lte("sla_due_at", horizon)
+        .order("sla_due_at");
+      if (error) throw new DataError("sla.reminders", error);
+      return data ?? [];
+    },
+  });
+}

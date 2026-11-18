@@ -1,3 +1,4 @@
+import { usePortalText, portalLabel } from "@/hooks/use-portal-language";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
@@ -31,6 +32,7 @@ export const Route = createFileRoute("/app/tickets/")({
 });
 
 function MyTicketsPage() {
+  const tr = usePortalText();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const { user, isAdmin, workspaceId } = useAuth();
@@ -57,8 +59,11 @@ function MyTicketsPage() {
   return (
     <>
       <PageHeader
-        title="My tickets"
-        description="Everything you've reported, and where it's got to."
+        title={tr("My tickets", "Mine sager")}
+        description={tr(
+          "Everything you've reported, and where it's got to.",
+          "Alle dine indberetninger og deres status.",
+        )}
         action={
           <div className="flex gap-2 max-md:w-full">
             <Button
@@ -74,12 +79,12 @@ function MyTicketsPage() {
                 })
               }
             >
-              {showClosed ? "Show open" : "Show closed"}
+              {showClosed ? tr("Show open", "Vis åbne") : tr("Show closed", "Vis lukkede")}
             </Button>
             <Button asChild className="max-md:hidden">
               <Link to="/app/report">
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-                Report something
+                {tr("Report something", "Indberet en sag")}
               </Link>
             </Button>
           </div>
@@ -89,20 +94,30 @@ function MyTicketsPage() {
       <div className="mx-auto max-w-6xl px-4 py-4 md:px-8 md:py-7">
         <QueryState
           query={tickets}
-          errorTitle="Couldn't load your tickets"
+          errorTitle={tr("Couldn't load your tickets", "Kunne ikke hente dine sager")}
           empty={
             <div className="rounded-[14px] border bg-card">
               <EmptyState
-                title={showClosed ? "Nothing closed yet" : "Nothing open"}
+                title={
+                  showClosed
+                    ? tr("Nothing closed yet", "Ingen lukkede sager endnu")
+                    : tr("Nothing open", "Ingen åbne sager")
+                }
                 description={
                   showClosed
-                    ? "Tickets you've had resolved will show up here."
-                    : "When something's not right, tell us. A screenshot is usually enough."
+                    ? tr(
+                        "Tickets you've had resolved will show up here.",
+                        "Dine løste sager vises her.",
+                      )
+                    : tr(
+                        "When something's not right, tell us. A screenshot is usually enough.",
+                        "Fortæl os, hvad der ikke virker. Et skærmbillede er som regel nok.",
+                      )
                 }
                 action={
                   !showClosed && (
                     <Button asChild>
-                      <Link to="/app/report">Report something</Link>
+                      <Link to="/app/report">{tr("Report something", "Indberet en sag")}</Link>
                     </Button>
                   )
                 }
@@ -129,10 +144,10 @@ function MyTicketsPage() {
                     {tickets.isFetchingNextPage ? (
                       <>
                         <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
-                        Loading
+                        {tr("Loading", "Henter")}
                       </>
                     ) : (
-                      "Load more"
+                      tr("Load more", "Vis flere")
                     )}
                   </Button>
                 </div>
@@ -146,15 +161,18 @@ function MyTicketsPage() {
 }
 
 function TicketsTable({ rows }: { rows: TicketListRow[] }) {
+  const tr = usePortalText();
   return (
     <div className="overflow-hidden rounded-[14px] border bg-card">
       <div className="flex gap-3 bg-surface px-4 py-2.5 text-xs text-muted-foreground max-md:hidden">
         <span className="w-12 shrink-0">#</span>
-        <span className="min-w-0 flex-[4]">Ticket</span>
-        <span className="hidden min-w-0 flex-[1.6] md:block">Project</span>
+        <span className="min-w-0 flex-[4]">{tr("Ticket", "Sag")}</span>
+        <span className="hidden min-w-0 flex-[1.6] md:block">{tr("Project", "Projekt")}</span>
         <span className="min-w-0 flex-[1.2]">Status</span>
         <span className="hidden min-w-0 flex-[0.8] sm:block">ETA</span>
-        <span className="hidden min-w-0 flex-[0.9] text-right sm:block">Updated</span>
+        <span className="hidden min-w-0 flex-[0.9] text-right sm:block">
+          {tr("Updated", "Opdateret")}
+        </span>
       </div>
       <ul>
         {rows.map((ticket) => (
@@ -185,7 +203,7 @@ function TicketsTable({ rows }: { rows: TicketListRow[] }) {
               </span>
               <span className="min-w-0 flex-[1.2] max-md:order-2 max-md:flex-none">
                 <StatusPill tone={TICKET_STATUS_TONE[ticket.status]}>
-                  {TICKET_STATUS_LABEL[ticket.status]}
+                  {portalLabel(tr, TICKET_STATUS_LABEL[ticket.status])}
                 </StatusPill>
               </span>
               <span

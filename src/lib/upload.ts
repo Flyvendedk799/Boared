@@ -123,7 +123,7 @@ export function attachmentPath(userId: string, ticketId: string, fileName: strin
 
 export interface UploadOutcome {
   uploaded: TicketAttachment[];
-  failed: Array<{ name: string; reason: string }>;
+  failed: Array<{ draftId?: string; name: string; reason: string }>;
 }
 
 /** Three at a time: enough to use the connection, few enough to stay responsive. */
@@ -134,12 +134,13 @@ export async function uploadDrafts(
   userId: string,
   drafts: DraftAttachment[],
   onProgress?: (done: number, total: number) => void,
+  rowIdByDraftId = new Map<string, string>(),
 ): Promise<UploadOutcome> {
   const uploaded: TicketAttachment[] = [];
   const failed: UploadOutcome["failed"] = [];
   // Maps a draft's local id to the attachment row it became, so an annotated
   // copy can point at the original once both exist.
-  const rowIdByDraftId = new Map<string, string>();
+
   let done = 0;
 
   // Originals first, so `source_attachment_id` can be resolved in one pass.
@@ -150,7 +151,7 @@ export async function uploadDrafts(
   const runOne = async (draft: DraftAttachment) => {
     const problem = validateFile(draft.file, draft.bucket);
     if (problem) {
-      failed.push({ name: draft.file.name, reason: problem });
+      failed.push({ draftId: draft.id, name: draft.file.name, reason: problem });
       return;
     }
 
@@ -159,7 +160,7 @@ export async function uploadDrafts(
     const { error: uploadError } = await uploadToStorage(draft.bucket, path, draft.file);
 
     if (uploadError) {
-      failed.push({ name: draft.file.name, reason: uploadError.message });
+      failed.push({ draftId: draft.id, name: draft.file.name, reason: uploadError.message });
       return;
     }
 
@@ -195,6 +196,7 @@ export async function uploadDrafts(
         });
       }
       failed.push({
+        draftId: draft.id,
         name: draft.file.name,
         reason: insertError?.message ?? "Could not record the attachment.",
       });
@@ -205,10 +207,28 @@ export async function uploadDrafts(
     uploaded.push(data);
   };
 
-  for (let i = 0; i < ordered.length; i += CONCURRENCY) {
-    await Promise.all(ordered.slice(i, i + CONCURRENCY).map(runOne));
-    done = Math.min(ordered.length, i + CONCURRENCY);
-    onProgress?.(done, ordered.length);
+  for (const group of [
+    ordered.filter((d) => !d.sourceDraftId),
+    ordered.filter((d) => d.sourceDraftId),
+  ]) {
+    for (let i = 0; i < group.length; i += CONCURRENCY) {
+      const batch = group.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        batch.map(async (draft) => {
+          try {
+            await runOne(draft);
+          } catch {
+            failed.push({
+              draftId: draft.id,
+              name: draft.file.name,
+              reason: "The upload was interrupted. Please retry.",
+            });
+          }
+        }),
+      );
+      done += batch.length;
+      onProgress?.(done, ordered.length);
+    }
   }
 
   return { uploaded, failed };
