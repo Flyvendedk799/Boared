@@ -1,16 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
@@ -113,6 +103,9 @@ function Panel({
 
 function ReportBody({ data }: { data: ReportSnapshot }) {
   const weeks = data.weeks.map((row) => ({ ...row, label: `W${isoWeekNumber(row.week)}` }));
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const selected = weeks.find((row) => row.week === selectedWeek) ?? weeks.at(-1);
+  const maxTickets = Math.max(1, ...weeks.map((row) => Math.max(row.opened, row.closed)));
   const hoursLabel = (hours: number | null) => (hours == null ? "—" : `${hours}h`);
 
   return (
@@ -131,52 +124,44 @@ function ReportBody({ data }: { data: ReportSnapshot }) {
             </span>
           </span>
         </div>
-        <div
-          className="h-64 max-md:h-56"
-          role="img"
-          aria-label="Tickets opened and closed per week"
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeks} barGap={3}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                axisLine={{ stroke: "var(--border)" }}
-                tickLine={false}
-              />
-              <YAxis
-                allowDecimals={false}
-                width={32}
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                cursor={{ fill: "var(--muted)", opacity: 0.5 }}
-                labelFormatter={(_, payload) =>
-                  payload?.[0]?.payload?.week
-                    ? `Week of ${formatDate(payload[0].payload.week)}`
-                    : ""
-                }
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 10,
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="opened" fill="var(--primary)" name="Opened" radius={[3, 3, 0, 0]} />
-              <Bar
-                dataKey="closed"
-                fill="var(--muted-foreground)"
-                fillOpacity={0.5}
-                name="Closed"
-                radius={[3, 3, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="overflow-x-auto">
+          <div
+            className="flex min-w-max gap-1 border-b"
+            role="group"
+            aria-label="Tickets opened and closed per week"
+          >
+            {weeks.map((week) => (
+              <button
+                type="button"
+                key={week.week}
+                className="flex min-w-11 flex-1 flex-col gap-1 rounded-t px-1 pb-1 text-xs hover:bg-muted focus-visible:ring-2 aria-pressed:bg-accent"
+                aria-label={`Week of ${formatDate(week.week)}, ${week.opened} opened, ${week.closed} closed`}
+                aria-pressed={selected?.week === week.week}
+                onMouseEnter={() => setSelectedWeek(week.week)}
+                onFocus={() => setSelectedWeek(week.week)}
+                onClick={() => setSelectedWeek(week.week)}
+              >
+                <span className="flex h-32 w-full items-end justify-center gap-0.5" aria-hidden>
+                  <span
+                    className="w-1/3 max-w-5 rounded-t-sm bg-primary"
+                    style={{ height: `${(week.opened / maxTickets) * 100}%` }}
+                  />
+                  <span
+                    className="w-1/3 max-w-5 rounded-t-sm bg-muted-foreground/50"
+                    style={{ height: `${(week.closed / maxTickets) * 100}%` }}
+                  />
+                </span>
+                <span className="self-center">{week.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
+        {selected && (
+          <p className="mt-2 text-sm tabular-nums">
+            Week of {formatDate(selected.week)} · {selected.opened} opened · {selected.closed}{" "}
+            closed
+          </p>
+        )}
       </section>
 
       <div className="grid gap-3.5 max-md:grid-cols-2 max-md:gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -272,6 +257,7 @@ function BillingCurrency({ row }: { row: ReportSnapshot["billing"][number] }) {
     { name: "31–60 days", value: row.aging.d60, fill: "var(--chart-1)" },
     { name: "Older", value: row.aging.older, fill: "var(--destructive)" },
   ];
+  const maxBucket = Math.max(1, ...buckets.map((bucket) => bucket.value));
   return (
     <div className="space-y-2 text-sm">
       <div className="font-medium">{row.currency}</div>
@@ -279,46 +265,33 @@ function BillingCurrency({ row }: { row: ReportSnapshot["billing"][number] }) {
         Outstanding {formatCents(row.outstandingCents, row.currency)} · Paid this month{" "}
         {formatCents(row.paidThisMonthCents, row.currency)}
       </div>
-      <div
-        className="h-36 max-md:h-44"
-        role="img"
+      <dl
+        className="grid grid-cols-[5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 pt-2"
         aria-label={`Outstanding ${row.currency} invoices by age`}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={buckets} margin={{ top: 8 }}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-              axisLine={{ stroke: "var(--border)" }}
-              tickLine={false}
-            />
-            <YAxis hide />
-            <Tooltip
-              cursor={{ fill: "var(--muted)", opacity: 0.5 }}
-              formatter={(value: number) => formatCents(value, row.currency)}
-              contentStyle={{
-                background: "var(--popover)",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                fontSize: 12,
-              }}
-            />
-            <Legend wrapperStyle={{ display: "none" }} />
-            <Bar dataKey="value" name="Outstanding" radius={[3, 3, 0, 0]}>
-              {buckets.map((bucket) => (
-                <Cell key={bucket.name} fill={bucket.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="break-words text-xs text-muted-foreground">
-        Aging: current {formatCents(row.aging.current, row.currency)} · 1–30 days{" "}
-        {formatCents(row.aging.d30, row.currency)} · 31–60 days{" "}
-        {formatCents(row.aging.d60, row.currency)} · older{" "}
-        {formatCents(row.aging.older, row.currency)}
-      </div>
+        {buckets.map((bucket) => (
+          <div
+            key={bucket.name}
+            className="col-span-full grid grid-cols-subgrid items-center text-xs"
+          >
+            <dt>{bucket.name}</dt>
+            <dd className="col-span-2 grid grid-cols-subgrid items-center">
+              <span aria-hidden className="h-2 overflow-hidden rounded bg-muted">
+                <span
+                  className="block h-full rounded"
+                  style={{
+                    backgroundColor: bucket.fill,
+                    width: `${(bucket.value / maxBucket) * 100}%`,
+                  }}
+                />
+              </span>
+              <span className="text-right tabular-nums">
+                {formatCents(bucket.value, row.currency)}
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
